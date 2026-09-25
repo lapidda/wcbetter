@@ -309,17 +309,56 @@ assert.ok(!findings.some((f) => f.id.startsWith("error:")), "no rule threw");
   assert.match(out.find((f) => f.id === "opener:missing:100")!.title, /missing from your opener/);
 
   assert.ok(ids.includes("opener:missing:200"), "filler shortfall detected (2 of 4)");
-  assert.ok(ids.includes("opener:sequence"), "side-by-side sequence emitted");
+  // The side-by-side is structured report data now, not a finding.
+  assert.ok(!ids.includes("opener:sequence"), "no sequence card among the findings");
 
   assert.ok(
     !ids.some((id) => id.includes("999999")),
     "unnamed ids (auto attacks) never produce a finding",
   );
-  assert.ok(
-    !out.find((f) => f.id === "opener:sequence")!.evidence.some((e) => e.includes("999999")),
-    "unnamed ids are kept out of the sequence card too",
-  );
   console.log("opener: ok");
+}
+
+// Trinkets, potions and racials are not sequencing: a reference set that all
+// opens with them must not make the player's opener look short of anything,
+// and they must not use up any of the twelve counted casts.
+{
+  const extra = (gameID: number, name: string, icon: string) => ({
+    gameID,
+    name,
+    icon,
+    casts: 1,
+    castsPerMinute: 0.2,
+    damage: 0,
+    damagePerCast: 0,
+    interCastGaps: [],
+  });
+  const extras = {
+    500: extra(500, "Nullsight", "inv_12_trinket_raid_voidspire_int1.jpg"),
+    501: extra(501, "Potion of Recklessness", "inv_12_profession_alchemy_voidpotion_red.jpg"),
+    502: extra(502, "Berserking", "racial_troll_berserk.jpg"),
+  };
+  // Twelve fillers with the three extras woven in, then the cooldown as the
+  // thirteenth rotational cast — outside the opener.
+  const refOpen = timelineOf([
+    [0, 501],
+    [100, 500],
+    [200, 502],
+    ...Array.from({ length: 12 }, (_, i) => [500 + i * 1000, 200] as [number, number]),
+    [13_000, 100],
+  ]);
+  const extrasReference: ReferenceProfile = {
+    ...reference,
+    members: members.map((m) => ({ ...m, abilities: { ...m.abilities, ...extras }, castTimeline: refOpen })),
+  };
+  const plain = timelineOf(Array.from({ length: 12 }, (_, i) => [500 + i * 1000, 200] as [number, number]));
+  const out = runRules({ player: { ...player, castTimeline: plain }, reference: extrasReference, fight });
+
+  assert.ok(
+    !out.some((f) => f.rule === "opener"),
+    "no opener finding for trinkets, potions or racials, nor for a cooldown past the twelfth cast",
+  );
+  console.log("opener extras: ok");
 }
 
 // A clean opener produces nothing at all, including no sequence card.

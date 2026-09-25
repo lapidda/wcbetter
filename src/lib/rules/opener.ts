@@ -1,3 +1,4 @@
+import { abilityMetaFrom, coreSteps, OPENER_CASTS, openerSequence } from "@/lib/model/opener";
 import { formatNumber } from "@/lib/model/stats";
 import type { PlayerProfile } from "@/lib/model/types";
 import {
@@ -9,27 +10,8 @@ import {
   type RuleContext,
 } from "./types";
 
-/**
- * How much of the pull counts as "the opener".
- *
- * Openers vary by spec and fight, so any fixed number is a compromise. 60s is
- * long enough to contain the full burst window on essentially every spec — most
- * major cooldowns are 60-180s and all of them go out at the start — and short
- * enough that it is still the scripted part of the fight, where every top parse
- * does the same thing and a difference is a genuine sequencing mistake rather
- * than a reaction to a mechanic.
- */
-const OPENER_MS = 60_000;
-
-/** How many casts of the sequence to show side by side. */
-const SEQUENCE_LENGTH = 10;
-
 /** Fraction of the reference set that must open with an ability before it is expected. */
 const CONSENSUS = 0.8;
-
-function openerCasts(profile: PlayerProfile): Array<{ atMs: number; gameID: number }> {
-  return profile.castTimeline.filter((c) => c.atMs < OPENER_MS);
-}
 
 function countByAbility(casts: Array<{ gameID: number }>): Map<number, number> {
   const counts = new Map<number, number>();
@@ -51,14 +33,22 @@ export const opener: Rule = {
   run({ player, reference }: RuleContext): Finding[] {
     const findings: Finding[] = [];
 
-    const yours = openerCasts(player);
+    // The first twelve rotational casts. Trinkets, potions and racials are
+    // skipped: owning a trinket or a race is not a sequencing decision, and
+    // counting them would shift every later cast by a slot. Casts nothing
+    // names (auto attacks, channel ticks) are dropped the same way.
+    const meta = abilityMetaFrom([player, ...reference.members], reference.abilityNames);
+    const openerOf = (profile: PlayerProfile) => coreSteps(openerSequence(profile.castTimeline, meta));
+
+    const yours = openerOf(player);
     // Reference members without a timeline cannot contribute; ignore them
     // entirely rather than letting them read as "opened with nothing".
     const refOpeners = reference.members
-      .map((m) => ({ member: m, casts: openerCasts(m) }))
+      .map((m) => ({ member: m, casts: openerOf(m) }))
       .filter((r) => r.casts.length > 0);
 
     if (yours.length === 0 || refOpeners.length === 0) return findings;
+    const window = { atMs: 0, endMs: yours[yours.length - 1].atMs, label: "opener" };
 
     const yourCounts = countByAbility(yours);
     const nameOf = (gameID: number) =>
@@ -97,7 +87,7 @@ export const opener: Rule = {
         ),
         estimatedGainPct: gainPct,
         facts: { lateMs: yourFirst - refFirst },
-        anchors: [{ atMs: 0, endMs: OPENER_MS, label: "opener" }],
+        anchors: [window],
       });
     }
 
@@ -116,11 +106,6 @@ export const opener: Rule = {
 
     for (const [gameID, entry] of expected) {
       if (entry.users < needed) continue;
-
-      // The cast event stream carries more than the Casts table does — auto
-      // attacks and channel ticks among it, which surface as unnamed ids firing
-      // twice a second. If we cannot name it, we cannot give advice about it.
-      if (!reference.abilityNames[gameID] && !player.abilities[gameID]) continue;
 
       const sorted = [...entry.counts].sort((a, b) => a - b);
       const refCount = sorted[Math.floor(sorted.length / 2)];
@@ -151,8 +136,8 @@ export const opener: Rule = {
             ? `${name} missing from your opener`
             : `${name} used ${yourCount}x in your opener, top parses use ${refCount}x`,
         detail:
-          `${entry.users} of ${refOpeners.length} reference parses cast ${name} ${refCount}x in the ` +
-          `first ${OPENER_MS / 1000}s. You cast it ${yourCount}x.` +
+          `${entry.users} of ${refOpeners.length} reference parses cast ${name} ${refCount}x in their ` +
+          `first ${OPENER_CASTS} casts. You cast it ${yourCount}x.` +
           (castLater
             ? ` You do use it later in the fight, so this is about when rather than whether — the ` +
               `opener is when your damage buffs and trinkets all line up.`
@@ -164,7 +149,7 @@ export const opener: Rule = {
           ? `Move ${name} into your opening sequence so it lands inside your burst window.`
           : `Add ${name} to your opener.${talentHedge(reference)}`,
         metric: {
-          label: `${name} in first ${OPENER_MS / 1000}s`,
+          label: `${name} in first ${OPENER_CASTS} casts`,
           you: String(yourCount),
           reference: String(refCount),
         },
@@ -177,49 +162,12 @@ export const opener: Rule = {
         ].filter(Boolean),
         estimatedGainPct: unmeasurable ? undefined : gainPct,
         abilityId: gameID,
-        anchors: [{ atMs: 0, endMs: OPENER_MS, label: "opener" }],
+        anchors: [window],
       });
     }
 
-    // --- Side-by-side sequence ----------------------------------------------
-    // Only worth showing once something above has actually flagged; on a clean
-    // opener it is noise.
-    if (findings.length > 0) {
-      // Same filter as above: auto attacks and channel ticks would otherwise
-      // fill the sequence with raw ids and bury the actual buttons pressed.
-      const named = (casts: Array<{ atMs: number; gameID: number }>) =>
-        casts.filter((c) => reference.abilityNames[c.gameID] || player.abilities[c.gameID]);
-
-      const sequence = (casts: Array<{ atMs: number; gameID: number }>) =>
-        named(casts)
-          .slice(0, SEQUENCE_LENGTH)
-          .map((c, i) => `${i + 1}. ${nameOf(c.gameID)} (${(c.atMs / 1000).toFixed(1)}s)`);
-
-      findings.push({
-        id: "opener:sequence",
-        rule: "opener",
-        severity: "info",
-        title: `Your opening casts vs the top parses`,
-        detail:
-          `The opener is the most comparable part of the pull — it is scripted, and everyone starts ` +
-          `with full resources and every cooldown up. Read these side by side and copy the order.`,
-        advice:
-          `Write the reference order down and drill it on a target dummy until it is automatic. ` +
-          `Nothing in the first 60s reacts to the fight, so what you practise is exactly what you ` +
-          `will do on the pull.`,
-        evidence: [
-          "YOURS:",
-          ...sequence(yours).map((line) => `  ${line}`),
-          "",
-          ...refOpeners.slice(0, 2).flatMap((r) => [
-            `${r.member.name.toUpperCase()}:`,
-            ...sequence(r.casts).map((line) => `  ${line}`),
-            "",
-          ]),
-        ],
-        anchors: [{ atMs: 0, endMs: OPENER_MS, label: "opener" }],
-      });
-    }
+    // The side-by-side sequence is not a finding: the report carries every
+    // opener structured (buildOpenerComparison) and the panel renders it.
 
     return findings;
   },

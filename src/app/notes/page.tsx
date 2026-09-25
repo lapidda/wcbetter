@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReportSummary } from "@/lib/analyze";
 import type { MechanicWave, NotableMechanic } from "@/lib/model/notable";
 import {
   addLine,
@@ -20,37 +19,16 @@ import {
   type DocLine,
   type StoredDoc,
 } from "@/lib/model/note-doc";
-import { formatDuration } from "@/lib/model/stats";
 import { buildHeader, generateLines, mergeCloseLines } from "@/lib/nsrt/generate";
 import { emitNote, parseNote } from "@/lib/nsrt/note-syntax";
-import type { RaidPayload } from "@/lib/model/raid-payload";
 import { rosterFromPayload } from "@/lib/model/raid-payload";
-import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
 import { MechanicTimeline, waveKey } from "@/components/MechanicTimeline";
 import { NoteEditor } from "@/components/NoteEditor";
-
-type Fight = ReportSummary["fights"][number];
-
-const LAST_KEY = "wcbetter:last";
-
-const readLast = (): { input?: string } => {
-  try {
-    return JSON.parse(localStorage.getItem(LAST_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-};
+import { useWorkspace } from "@/components/Workspace";
 
 export default function Notes() {
-  const [input, setInput] = useState("");
-  const [summary, setSummary] = useState<ReportSummary | null>(null);
-  const [encounterKey, setEncounterKey] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-
-  const [payload, setPayload] = useState<RaidPayload | null>(null);
-  const [progress, setProgress] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { summary, raid } = useWorkspace();
+  const { result: payload, busy, progress } = raid;
   const [error, setError] = useState<string | null>(null);
 
   const [caller, setCallerName] = useState("");
@@ -59,155 +37,6 @@ export default function Notes() {
   const [copied, setCopied] = useState(false);
   const [existing, setExisting] = useState("");
   const [mergeMsg, setMergeMsg] = useState<string | null>(null);
-
-  const pendingPulls = useRef<number[] | null>(null);
-  const autoRan = useRef(false);
-
-  const encounters = useMemo(() => {
-    if (!summary) return [];
-    const groups = new Map<string, { key: string; label: string; fights: Fight[] }>();
-    for (const fight of summary.fights) {
-      if (fight.encounterID <= 0) continue;
-      const key = `${fight.encounterID}:${fight.difficulty}`;
-      const group = groups.get(key);
-      if (group) group.fights.push(fight);
-      else groups.set(key, { key, label: `${fight.difficulty} ${fight.name}`, fights: [fight] });
-    }
-    return [...groups.values()];
-  }, [summary]);
-
-  const activeEncounter = encounters.find((e) => e.key === encounterKey) ?? null;
-
-  const chooseEncounter = useCallback(
-    (key: string, fights?: Fight[]) => {
-      setEncounterKey(key);
-      const group = fights ?? encounters.find((e) => e.key === key)?.fights ?? [];
-      setSelected(new Set(defaultSelection(group).selected));
-    },
-    [encounters],
-  );
-
-  const loadReport = useCallback(async (value: string) => {
-    setLoading(true);
-    setError(null);
-    setSummary(null);
-    setPayload(null);
-    setLines([]);
-    try {
-      const res = await fetch(`/api/report?input=${encodeURIComponent(value)}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setSummary(json);
-      try {
-        localStorage.setItem(LAST_KEY, JSON.stringify({ ...readLast(), input: value }));
-      } catch {
-        // Private browsing: remembering is a convenience, not a requirement.
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const state = decodeState(window.location.search);
-    if (state.report) {
-      pendingPulls.current = state.pulls ?? null;
-      const url = `https://www.warcraftlogs.com/reports/${state.report}${encodeState({
-        fight: state.fight,
-      })}`;
-      setInput(url);
-      void loadReport(url);
-      return;
-    }
-    const last = readLast();
-    if (last.input) setInput(last.input);
-  }, [loadReport]);
-
-  // Pick the encounter once the report lands: the linked fight, else the boss
-  // with the most pulls, which is what the night was actually about.
-  useEffect(() => {
-    if (!summary || encounters.length === 0 || encounterKey) return;
-    const linked = summary.link.fightId
-      ? encounters.find((e) => e.fights.some((f) => f.id === summary.link.fightId))
-      : null;
-    const biggest = [...encounters].sort((a, b) => b.fights.length - a.fights.length)[0];
-    const pick = linked ?? biggest;
-    if (!pick) return;
-
-    if (pendingPulls.current) {
-      const wanted = new Set(pendingPulls.current);
-      setEncounterKey(pick.key);
-      setSelected(new Set(pick.fights.filter((f) => wanted.has(f.id)).map((f) => f.id)));
-      pendingPulls.current = null;
-    } else {
-      chooseEncounter(pick.key, pick.fights);
-    }
-  }, [summary, encounters, encounterKey, chooseEncounter]);
-
-  const analyse = useCallback(async () => {
-    if (!summary || selected.size === 0) return;
-    setBusy(true);
-    setError(null);
-    setPayload(null);
-    setProgress([]);
-
-    const fightIds = [...selected].sort((a, b) => a - b);
-    try {
-      window.history.replaceState(
-        null,
-        "",
-        encodeState({ report: summary.code, fight: fightIds[fightIds.length - 1], pulls: fightIds }) ||
-          window.location.pathname,
-      );
-    } catch {
-      // Non-fatal: the analysis matters more than the URL.
-    }
-
-    try {
-      const res = await fetch("/api/raid", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: summary.code, fightIds }),
-      });
-      if (!res.body) throw new Error("No response stream");
-
-      // Same minimal SSE reader as /api/analyze: POST rules out EventSource.
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() ?? "";
-        for (const chunk of chunks) {
-          const event = chunk.match(/^event: (.+)$/m)?.[1];
-          const dataLine = chunk.match(/^data: (.+)$/m)?.[1];
-          if (!event || !dataLine) continue;
-          const data = JSON.parse(dataLine);
-          if (event === "progress") setProgress((p) => [...p, data.message]);
-          else if (event === "report") setPayload(data as RaidPayload);
-          else if (event === "error") setError(data.message);
-        }
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }, [summary, selected]);
-
-  useEffect(() => {
-    if (autoRan.current || busy || payload) return;
-    if (!summary || selected.size === 0) return;
-    if (!decodeState(window.location.search).pulls) return;
-    autoRan.current = true;
-    void analyse();
-  }, [summary, selected, busy, payload, analyse]);
 
   const roster = useMemo(() => (payload ? rosterFromPayload(payload) : null), [payload]);
 
@@ -345,84 +174,32 @@ export default function Notes() {
   const unwritten = lines.filter((l) => l.enabled && l.generated.includes("<call>") && !l.custom);
 
   return (
-    <main className="wrap">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-        <h1 style={{ margin: 0 }}>Raid notes</h1>
-        <a className="muted" href="/" style={{ fontSize: 13 }}>
-          ← DPS analysis
-        </a>
-      </div>
-      <p className="muted" style={{ marginTop: 4 }}>
+    <div className="wrap">
+      <h1 style={{ fontSize: 26, margin: "0 0 4px" }}>Raid notes</h1>
+      <p className="muted" style={{ marginTop: 0 }}>
         What the raid keeps failing, as a callout sheet for whoever is running it.
+        {!summary && " Load a report in the sidebar to start."}
+        {summary && !payload && !busy && " Pick a boss and its pulls in the sidebar, then press Analyse."}
       </p>
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
-          <input
-            type="text"
-            value={input}
-            placeholder="https://www.warcraftlogs.com/reports/…"
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void loadReport(input)}
-          />
-          <button onClick={() => void loadReport(input)} disabled={loading || !input.trim()}>
-            {loading ? "Loading…" : "Load"}
-          </button>
+      {(raid.error || error) && (
+        <div className="panel" style={{ marginTop: 14, borderColor: "var(--critical)" }}>
+          {raid.error ?? error}
         </div>
+      )}
 
-        {summary && (
-          <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: "nowrap" }}>
-            <select
-              value={encounterKey ?? ""}
-              onChange={(e) => chooseEncounter(e.target.value)}
-              style={{ flex: 1 }}
-            >
-              {encounters.map((e) => (
-                <option key={e.key} value={e.key}>
-                  {e.label} ({e.fights.length} pulls)
-                </option>
-              ))}
-            </select>
-            <button className="primary" onClick={() => void analyse()} disabled={busy || selected.size === 0}>
-              {busy ? "Analysing…" : `Analyse ${selected.size} pulls`}
-            </button>
-          </div>
-        )}
+      {busy && (
+        <div className="panel mono" style={{ marginTop: 14 }}>
+          {progress.length === 0 && <div className="muted">Starting…</div>}
+          {progress.map((line, i) => (
+            <div key={i} className={i === progress.length - 1 ? undefined : "muted"}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
 
-        {activeEncounter && !busy && (
-          <div className="row" style={{ gap: 6, marginTop: 8, fontSize: 11 }}>
-            {activeEncounter.fights.map((f) => (
-              <label key={f.id} className="muted" style={{ cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(f.id)}
-                  onChange={() =>
-                    setSelected((s) => {
-                      const next = new Set(s);
-                      if (next.has(f.id)) next.delete(f.id);
-                      else next.add(f.id);
-                      return next;
-                    })
-                  }
-                  style={{ width: 13, marginRight: 3 }}
-                />
-                {formatDuration(f.durationMs)}
-              </label>
-            ))}
-          </div>
-        )}
-
-        {busy && progress.length > 0 && (
-          <div className="mono muted" style={{ marginTop: 10, fontSize: 11 }}>
-            {progress[progress.length - 1]}
-          </div>
-        )}
-        {error && (
-          <p style={{ color: "var(--critical)", marginTop: 10, marginBottom: 0 }}>{error}</p>
-        )}
-      </div>
-
-      {payload && (
+      {payload && !busy && (
         <>
           <div className="panel" style={{ marginTop: 14 }}>
             <div className="section-head">
@@ -599,6 +376,6 @@ export default function Notes() {
           </div>
         </>
       )}
-    </main>
+    </div>
   );
 }

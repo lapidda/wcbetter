@@ -14,20 +14,25 @@ Two premises:
 
 ## Using it
 
-Paste a WarcraftLogs URL straight from the address bar. If it carries `fight=` and `source=` — which
-every link from a log page does — the boss and the player fill themselves in, every pull of that boss
-is ticked (short accidental pulls excluded, with a reason), and you press one button.
+Everything is driven from the sidebar on the left, which stays put while results scroll: the report
+link, the player, the boss list and every pull of the selected boss. Paste a WarcraftLogs URL straight
+from the address bar. If it carries `fight=` and `source=` — which every link from a log page does —
+the boss and the player fill themselves in, every pull of that boss is ticked (short accidental pulls
+excluded, with a reason), and you press one button. `▸` next to a pull analyses just that pull, so
+trying a different pull never means going back to a form.
 
-Clicking Analyze rewrites the address bar into a shareable link
-(`/?report=…&source=…&fight=…&pulls=…`). Opening that link replays the whole report with no clicks,
-which is what makes this usable between a player and a raid lead. The browser also remembers your
-last log, so a weekly user does not re-pick themselves.
+The sidebar switches between the two views — **Player analysis** and **Raid notes** ([Raid
+notes](#raid-notes)) — and both share the loaded report, the selection and each other's finished
+results, so flipping between them re-fetches nothing. Once the player analysis has run, each pull in
+the list shows its DPS.
+
+Clicking Analyse rewrites the address bar into a shareable link
+(`/?report=…&source=…&fight=…&pulls=…`, or `/notes?…` for the raid notes). Opening that link replays
+the whole analysis with no clicks, which is what makes this usable between a player and a raid lead.
+The browser also remembers your last log and character, so a weekly user does not re-pick themselves.
 
 The player picker is sorted by damage on a sample fight and shows each spec, so the DPS this tool is
 built for come first and the healers sink — without a hardcoded list of which specs are which.
-
-`/notes` is the other half: the raid-wide analysis and the NSRT callout sheet ([Raid
-notes](#raid-notes)). Both pages share the `report`/`fight`/`pulls` link format.
 
 From the command line, both analyses print what the UI shows plus what it cost:
 
@@ -57,16 +62,19 @@ value works there.
 npm run dev
 ```
 
-Paste a report, pick a player, pick a boss, and every pull of that boss is selected by default.
+Paste a report in the sidebar, pick a player and a boss, and every pull of that boss is selected by
+default.
 
 ## How it works
 
 ```
 src/lib/wcl/       OAuth, GraphQL client, disk cache
-src/lib/model/     raw JSON -> typed profiles; reference profile from rankings; cross-pull aggregation
+src/lib/model/     raw JSON -> typed profiles; reference profile from rankings; cross-pull aggregation;
+                   cast-timeline lanes for the comparison view
 src/lib/rules/     one analyzer per file, each emits Findings for a single pull
 src/lib/analyze.ts orchestration
 src/app/api/       report metadata, SSE-streamed analysis, coach narrative
+src/components/    Workspace (shared state for both views, in the root layout), Sidebar, the report views
 ```
 
 Rules stay **single-fight**. Multi-pull support is an aggregation layer
@@ -174,7 +182,7 @@ match it couldn't make. The match percentage is shown in the UI, with a warning 
 | Rule | What it catches |
 |---|---|
 | `missed-cooldowns` | Long-cooldown abilities cast fewer times than the fight length allowed. Cooldowns are estimated empirically from the shortest gaps observed across the reference set, so no spell database is needed. On-use trinkets and stat buffs deal no direct damage, so their value can't be measured — they rank on severity with the gain left blank rather than reported as zero. |
-| `opener` | The first 60s in detail: how late you start, which abilities the top parses always open with that you don't, and a side-by-side of your opening sequence against two of them. The opener is the most comparable part of any pull — it's scripted, everyone starts with full resources and every cooldown up — so a difference is a real sequencing mistake rather than a reaction to a mechanic, which makes it the most practisable thing in the report. |
+| `opener` | Your first 12 rotational casts: how late you start, and which abilities the top parses always open with that you don't. Trinkets, potions and racials don't count toward the 12 and never produce a finding (see [The opener](#the-opener)). The opener is the most comparable part of any pull — it's scripted, everyone starts with full resources and every cooldown up — so a difference is a real sequencing mistake rather than a reaction to a mechanic, which makes it the most practisable thing in the report. |
 | `cast-frequency` | Abilities the top parses press far more often than you, and abilities they all press that you never cast. Catches priority-order mistakes without knowing the spec. |
 | `active-time` | Uptime vs the reference median, plus the timestamped list of every gap over 3s — each labelled with the boss cast that preceded it (`2.3s after Corrosive Spit`) or, explicitly, `no boss cast in the previous 8s`. |
 | `recurring-downtime` | **Multi-pull only.** Downtime landing in the same 15s window of the fight, pull after pull, named after the boss cast most affected pulls share (`…on 8 of 12 pulls, right after Corrosive Spit`). Checked against the top parses in the *same window*: if they stop there too, the mechanic is stopping everyone, so it is labelled **forced downtime**, capped at `minor`, and costed only on the difference — `They lose 3.9s here and you lose 11.0s; only the 7.1s difference is worth chasing`. |
@@ -221,8 +229,9 @@ The page answers "what do I fix first" before it shows anything else:
   seconds, so only one of them can lead. Each item shows its gain in absolute DPS at your median
   (`≈ +17.6k DPS (+20.2%)`), with the advice before the evidence. The header tile is the diminishing
   sum of those three and says what share of the gap to the reference they would close.
-- **Your opening casts vs the top parses** — always visible, in columns. It is the most practisable
-  thing in the report, so it is never hidden behind a disclosure.
+- **Your opener vs the top parses** — always visible, lined up like a diff (see [The
+  opener](#the-opener)). It is the most practisable thing in the report, so it is never hidden
+  behind a disclosure.
 - **Sections by family**, each carrying its own budget (`Downtime · 5 findings · up to +13.5%`), all
   cards collapsed, six shown before a `Show N more`.
 - **One-offs** — anything that fired on a single pull of several, folded away. A bad pull is not a
@@ -238,6 +247,54 @@ cooldown (the number that says where a missing cast actually went), and your dam
 what you cast *too much* as well as too little, which is the other half of "what am I casting
 instead". Every timestamp deep-links into the WarcraftLogs replay at that moment with you selected;
 every ability links to Wowhead.
+
+### The opener
+
+The opener is the first **12 rotational casts**, a count rather than a time window: a window
+punishes nothing but haste, because a player on worse gear fits fewer casts into 60s and "misses" the
+tail of an opener they played correctly.
+
+**Trinkets, potions and racials are shown but not counted.** Whether a top parse owns an on-use
+trinket or plays a Troll says nothing about the player's sequencing, and counting them would shift
+every later cast by a slot. They are listed where they happened, tagged, and never become a finding.
+Trinkets and potions are recognised by icon — every measured trinket used an icon with `trinket` in
+its file name, every potion one with `potion`, and other on-use items an alchemy or flask icon;
+effect names alone ("Nullsight") would miss them. Racials come from a short list of names, the one
+hardcoded piece here: the log marks nothing as racial, and icons cannot be trusted for it — Bear
+Form's is `ability_racial_bearform`.
+
+The panel compares one of your pulls (your best kill by default) with **one top parse you pick**.
+The two sequences are aligned like a diff: casts you both make in the same order share a row, and the
+rest is coloured — **out of order** (in both, at a different point), **missing** (they press it, you
+do not) and **extra** (you press it, they never do). A plain position-by-position comparison would
+mark every cast after the first difference as wrong. Openers repeat buttons, so several alignments
+often tie; among those it prefers the one pairing casts at neighbouring positions, which is the one
+a reader would draw. One press logged under two ids at the same instant (measured on Voidblade) is
+counted once.
+
+### Cast timeline
+
+The second tab of the player analysis is the whole fight laid out cast by cast: one row per ability,
+and inside each row one lane for you and one for each top parse you toggle on. The opener and burn
+panels compare the scripted windows; this is for everything in between — which cooldowns drift later
+every minute, which filler they press while moving, where their casts bunch up and yours thin out.
+
+- **Cooldowns come first**, drawn with a faint bar for the time each press kept it unavailable. The
+  empty stretch after a bar is time it sat ready and unused — "time held", read off the picture.
+- **Fight time or % of fight.** Top parses are usually faster kills, so seconds line up the opener and
+  percentages line up the phases. Zoom goes to 16× and keeps the centre of the view where it was;
+  drag the chart to pan.
+- **Rows can be hidden** (the × on a row's label) to condense the view — utility buttons like Roll or
+  Dash. Hidden rows are remembered per spec in the browser and listed under the chart to restore.
+- **Labels carry casts/min per lane** and are edged red where you cast it far less than the top
+  parses (or never) and amber where you cast it far more — the same ±25% the rotation table uses.
+- It opens on your best kill, or your longest pull on a night without one, against the top-ranked
+  parse. Your pull's boss casts run across the top, and the burn phase and deaths are marked per lane.
+
+It costs no extra queries: every profile, yours and the reference's, is already built from its full
+cast event stream for the rules. Only buttons that appear in someone's Casts table become rows — the
+event stream also carries auto attacks and channel ticks — and ids that share a name are one row, so a
+talent-modified version of a spell does not read as a second button.
 
 Item level is shown for you and the reference (`ilvl 313`, `they average 3 ilvl higher`) so the raw
 DPS delta is read in context — the per-finding gains are already scaled to your own output.

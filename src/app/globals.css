@@ -13,6 +13,7 @@
   --major: #ff7a45;
   --minor: #e0af68;
   --info: #6f8fc7;
+  --good: #9ece6a;
 
   color-scheme: dark;
 }
@@ -85,9 +86,382 @@ select:focus {
 }
 
 .wrap {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 40px 24px 96px;
+  padding: 32px 28px 96px;
+}
+
+/* App shell: the loaded report stays on the left, results scroll on the right. */
+.shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.content {
+  min-width: 0;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px 14px 0;
+  font-size: 13px;
+}
+
+.side-brand a {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 18px;
+  text-decoration: none;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 12px 0 6px;
+}
+
+.side-nav a {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+}
+
+.side-nav a:hover {
+  background: var(--panel-2);
+}
+
+.side-nav a.active {
+  background: var(--panel-2);
+  border-left-color: var(--accent);
+}
+
+.side-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.side-section {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.side-label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.side-error {
+  color: var(--critical);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.side-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+button.side-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 5px;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+}
+
+button.side-item:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+
+button.side-item.active {
+  background: var(--panel-2);
+  border-left-color: var(--accent);
+}
+
+.side-pull {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  padding: 1px 2px 1px 4px;
+  border-left: 2px solid transparent;
+}
+
+.side-pull:hover {
+  background: var(--panel-2);
+}
+
+.side-pull.shown {
+  border-left-color: var(--accent);
+}
+
+.side-pull label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.side-pull input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+button.side-mini {
+  padding: 1px 7px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.side-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 12px 0 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+
+/* Toggle chips and segmented controls. */
+button.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 999px;
+  opacity: 0.55;
+}
+
+button.chip.on {
+  opacity: 1;
+  border-color: var(--muted);
+}
+
+.swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: 0;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg button {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.seg button + button {
+  border-left: 1px solid var(--border);
+}
+
+.seg button.on {
+  background: var(--accent);
+  color: #0e1013;
+  font-weight: 600;
+}
+
+/* Cast timeline row labels: the hide button appears on hover or focus. */
+.row-label button.row-hide {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 18px;
+  opacity: 0;
+}
+
+.row-label:hover button.row-hide,
+.row-label button.row-hide:focus-visible {
+  opacity: 1;
+}
+
+/* Opener side-by-side: two columns lined up like a diff. */
+.op-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 2px;
+}
+
+.op-head {
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  padding: 0 8px 6px;
+}
+
+.op-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border-left: 3px solid transparent;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.op-index {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.op-name {
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.op-name:hover {
+  text-decoration: underline;
+}
+
+.op-time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.op-tag {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.op-extra-cast {
+  opacity: 0.6;
+  min-height: 22px;
+  font-size: 12px;
+}
+
+.op-gap {
+  border: 1px dashed var(--border);
+  border-left-width: 1px;
+}
+
+.op-order {
+  background: rgba(224, 175, 104, 0.12);
+  border-left-color: var(--minor);
+}
+
+.op-missing {
+  background: rgba(247, 118, 142, 0.13);
+  border-left-color: var(--critical);
+}
+
+.op-extra {
+  background: rgba(255, 122, 69, 0.12);
+  border-left-color: var(--major);
+}
+
+.op-key {
+  padding: 1px 8px;
+  border-radius: 4px;
+  border-left: 3px solid var(--border);
+}
+
+.op-key.op-same {
+  border-left-color: var(--muted);
+}
+
+/* Tabs inside a view. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 8px 14px;
+  color: var(--muted);
+}
+
+.tabs button:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+}
+
+.tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .side-footer {
+    position: static;
+  }
+
+  .wrap {
+    padding: 20px 16px 64px;
+  }
 }
 
 .panel {

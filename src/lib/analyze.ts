@@ -2,6 +2,8 @@ import { aggregateFindings, findRecurringDowntime } from "./model/aggregate";
 import type { AggregatedFinding, PullSummary } from "./model/aggregate";
 import { buildReferenceProfile } from "./model/benchmark";
 import { buildAbilityRows, type AbilityRow } from "./model/abilities";
+import { buildCastComparison, type CastComparison } from "./model/cast-compare";
+import { buildOpenerComparison, type OpenerComparison } from "./model/opener";
 import { mechanicBefore } from "./model/encounter";
 import { focusGain, sectionize, selectFocus, type FindingFamily, type FocusItem } from "./model/focus";
 import { buildPlayerProfile } from "./model/profile";
@@ -88,6 +90,10 @@ export interface AnalysisReport {
   abilities: AbilityRow[];
   /** gameID -> icon file, merged across your abilities and the boss's. */
   icons: Record<number, string>;
+  /** Whole-fight cast timelines, yours and the reference parses', one row per ability. */
+  castComparison: CastComparison;
+  /** Every pull's opener and every reference parse's, for the side-by-side panel. */
+  opener: OpenerComparison;
 }
 
 export interface PullTimeline {
@@ -259,6 +265,10 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
     playerMedianDps,
   );
 
+  const lanes = profiled.map(({ pull, profile }) => ({ profile, label: pull.label, kill: pull.kill }));
+  const castComparison = buildCastComparison(lanes, reference);
+  const opener = buildOpenerComparison(lanes, reference);
+
   return {
     report: { code: meta.code, title: meta.title },
     encounter: {
@@ -324,6 +334,8 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
         .filter((a) => a.icon)
         .map((a) => [a.gameID, a.icon as string]),
     ]),
+    castComparison,
+    opener,
   };
 }
 
