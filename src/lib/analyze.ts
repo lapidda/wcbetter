@@ -4,6 +4,7 @@ import { buildReferenceProfile } from "./model/benchmark";
 import { buildAbilityRows, type AbilityRow } from "./model/abilities";
 import { buildCastComparison, type CastComparison } from "./model/cast-compare";
 import { buildOpenerComparison, type OpenerComparison } from "./model/opener";
+import { buildWindwalkerReport, type WindwalkerReport } from "./spec/windwalker";
 import { mechanicBefore } from "./model/encounter";
 import { focusGain, sectionize, selectFocus, type FindingFamily, type FocusItem } from "./model/focus";
 import { buildPlayerProfile } from "./model/profile";
@@ -11,7 +12,9 @@ import { formatDuration, median } from "./model/stats";
 import type { PlayerProfile, ReferenceProfile } from "./model/types";
 import { buildEncounterContext } from "./raid-context";
 import { runRules } from "./rules";
-import { getReportMeta, getTable } from "./wcl/fetchers";
+import { buildTalentBuilds, type TalentBuilds } from "./talents/builds";
+import { getSpecTree } from "./talents/talent-data";
+import { getCharacterRankings, getReportMeta, getTable, getTalentRanksByActor } from "./wcl/fetchers";
 import { difficultyName, type Fight, type ReportMeta } from "./wcl/types";
 
 export interface AnalysisReport {
@@ -94,6 +97,10 @@ export interface AnalysisReport {
   castComparison: CastComparison;
   /** Every pull's opener and every reference parse's, for the side-by-side panel. */
   opener: OpenerComparison;
+  /** Windwalker-specific analysis; null for every other spec. */
+  windwalker: WindwalkerReport | null;
+  /** Hero trees and copyable builds of the top 100 on this boss; null if the tree data was unavailable. */
+  talentBuilds: TalentBuilds | null;
 }
 
 export interface PullTimeline {
@@ -217,8 +224,32 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
   ].sort((a, b) => b.priority - a.priority);
 
   // A rule that threw is a bug report, not a finding.
+  // --- Talent builds of the top 100 -------------------------------------------
+  // The rankings page is the one the reference set was chosen from (cached),
+  // and the player's ranks come from the CombatantInfo already read for pull 1.
+  let talentBuilds: TalentBuilds | null = null;
+  const buildWarnings: string[] = [];
+  if (className && specName) {
+    try {
+      const tree = await getSpecTree(className, specName);
+      if (tree) {
+        const rankings = await getCharacterRankings(encounterID, {
+          className,
+          specName,
+          difficulty: difficulty ?? undefined,
+          metric: "dps",
+        });
+        const mine = (await getTalentRanksByActor(args.code, fights[0].id))[actor.id] ?? null;
+        talentBuilds = buildTalentBuilds(tree, rankings, mine);
+      }
+    } catch (error) {
+      buildWarnings.push(`Talent builds unavailable: ${(error as Error).message}`);
+    }
+  }
+
   const warnings = [
     ...contextWarnings,
+    ...buildWarnings,
     ...ranked.filter((f) => f.id.startsWith("error:")).map((f) => `${f.title}: ${f.detail}`),
   ];
   const findings = ranked.filter((f) => !f.id.startsWith("error:"));
@@ -268,6 +299,10 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
   const lanes = profiled.map(({ pull, profile }) => ({ profile, label: pull.label, kill: pull.kill }));
   const castComparison = buildCastComparison(lanes, reference);
   const opener = buildOpenerComparison(lanes, reference);
+  const windwalker = buildWindwalkerReport(
+    lanes.map((l, i) => ({ ...l, startTime: fights[i].startTime })),
+    reference,
+  );
 
   return {
     report: { code: meta.code, title: meta.title },
@@ -336,6 +371,8 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
     ]),
     castComparison,
     opener,
+    windwalker,
+    talentBuilds,
   };
 }
 

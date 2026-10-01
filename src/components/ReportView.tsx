@@ -13,11 +13,12 @@ import { FindingSection } from "./FindingSection";
 import { FocusBlock } from "./FocusBlock";
 import { OpenerPanel } from "./OpenerPanel";
 import { SequencePanel } from "./SequencePanel";
+import { TalentBuilds } from "./TalentBuilds";
 import { PullTimeline } from "./PullTimeline";
 
 const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
 
-type Tab = "findings" | "timeline";
+type Tab = "findings" | "timeline" | "talents";
 
 export function ReportView({ report }: { report: AnalysisReport }) {
   const [tab, setTab] = useState<Tab>("findings");
@@ -90,6 +91,7 @@ export function ReportView({ report }: { report: AnalysisReport }) {
           [
             ["findings", "Findings"],
             ["timeline", "Cast timeline"],
+            ["talents", "Talents"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -106,6 +108,8 @@ export function ReportView({ report }: { report: AnalysisReport }) {
       </div>
 
       {tab === "timeline" && <CastComparison report={report} />}
+
+      {tab === "talents" && <TalentBuilds report={report} />}
 
       {tab === "findings" && (
         <>

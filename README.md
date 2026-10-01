@@ -21,9 +21,10 @@ the boss and the player fill themselves in, every pull of that boss is ticked (s
 excluded, with a reason), and you press one button. `▸` next to a pull analyses just that pull, so
 trying a different pull never means going back to a form.
 
-The sidebar switches between the two views — **Player analysis** and **Raid notes** ([Raid
-notes](#raid-notes)) — and both share the loaded report, the selection and each other's finished
-results, so flipping between them re-fetches nothing. Once the player analysis has run, each pull in
+The sidebar switches between the views — **Player analysis**, **Windwalker** ([Windwalker](#windwalker),
+a Monk-specific lens on the same run) and **Raid notes** ([Raid notes](#raid-notes)) — and they share
+the loaded report, the selection and each other's finished results, so flipping between them
+re-fetches nothing. Once the player analysis has run, each pull in
 the list shows its DPS.
 
 Clicking Analyse rewrites the address bar into a shareable link
@@ -310,6 +311,62 @@ simply ended early is graded `info`, not a mistake. Whether to hold a cooldown f
 rotational opinion this project does not hardcode. Deaths read the damage rewind themselves ("one hit
 did it" vs "you were already low"). The "check your talents" hedge only appears when build matching
 could not vouch for the reference set.
+
+## Talent builds
+
+The **Talents** tab (also shown in the Windwalker view) answers two questions for the analysed boss and
+difficulty: which hero tree do the top players pick, and what exactly do they run — as in-game strings
+to copy. It is built from the rankings page the reference set was already chosen from (top 100,
+talents inline), so it costs no extra queries.
+
+- **Hero tree split**: share of the top 100, best rank and top-5 median per tree. On Sszorak this is
+  where Shado-Pan shows up as the near-equal it is there (42-68% of the top 100), while it is 0-3% on
+  every other Venomous Abyss boss.
+- **Most used** build per tree — the exact build the most top players share, with who runs it and how
+  many more are within two talents — and the **best player's** build when it differs.
+- **Your build** as a string, and every node where it differs from the most used build of your tree.
+
+WarcraftLogs gives talents as entry ids with points, never as a string, so the string is written here
+(`src/lib/talents/loadout.ts`): the game's export format — version, spec, a zero tree hash, then a few
+bits per node in a fixed node order — over the tree layout from Raidbots' public talent data
+(`talent-data.ts`, cached per week since it changes with every patch). It is verified by round-tripping
+nine strings exported from the game byte for byte, each decoding to exactly the 34/34/13 point budget
+(`test/loadout.test.ts`), and Wowhead opens the generated strings as the right spec and hero tree. One
+trap worth knowing: an apex node such as Tigereye Brew is *tiered* — one node whose ranks the log lists
+across several entries — and its rank is their sum, not the last entry's.
+
+## Windwalker
+
+`/monk` is a third view on the same player analysis — no extra queries — for Windwalker Monks. It is
+the one place the project knows a spec: which button is the burst, which presses break Combo Strikes,
+what a Conduit burst window has to contain. It still hardcodes no *numbers*: every target it shows is
+what the build-matched top parses did on the same boss, measured the same way, and its thresholds are
+what 15 Conduit top parses (67 Xuen windows across Heroic Ula'tek and Mythic Nek'zali and Entombed
+Sentinels, patch 12.1) were measured to keep. The code is `src/lib/spec/windwalker.ts`.
+
+- **Hero tree from the log**: Celestial Conduit or Xuen casts mean Conduit of the Celestials, Flurry
+  Strikes damage means Shado-Pan. When the top parses play the other tree — likely for Shado-Pan, which
+  was 2-4% of the measured rankings — the page says so.
+- **A scorecard** of the checks, each with your value, the top parses', and what to change.
+- **Every burst window** (Conduit): Zenith and items with Xuen, two Fists of Fury and one Whirling
+  Dragon Punch before Conduit, no Tiger Palm in the first 12s, Conduit 8-16s after Xuen and at least
+  5s after Whirling Dragon Punch. Click a window for its presses.
+- **Every wrong press marked where it happened** — red for a mistake, yellow for something to look at —
+  each linked into the WarcraftLogs replay.
+- **Filler habits** after Fists of Fury and Whirling Dragon Punch, and presses per minute, against the
+  top parses.
+
+Three rules that look obvious were measured against the top parses and changed:
+
+- **Combo Strikes.** The same button twice with *nothing* between happened 11 times in ~5,000 top-parse
+  presses; with Zenith, Zenith Stomp, Xuen or a movement button between, 63 times. Only the first is a
+  break.
+- **Fists of Fury right after Celestial Conduit** (the guide's Unity Within macro) is done about half
+  the time, 0-100% by player. It is shown per window and never marked.
+- **Tiger Palm in the burst** only counts in the first 12s: when Conduit is held for a mechanic, the
+  top parses press Tiger Palm in the tail of the window.
+
+Shado-Pan gets the universal checks only; the burst-window rules are Conduit's.
 
 ## Raid notes
 

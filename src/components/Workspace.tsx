@@ -21,7 +21,10 @@ import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
 // different pull from the sidebar without starting over.
 
 export type Fight = ReportSummary["fights"][number];
-export type View = "player" | "notes";
+export type View = "player" | "notes" | "monk";
+
+/** The player analysis and the Windwalker view share one run: same analysis, different lens. */
+export const usesPlayerRun = (view: View) => view !== "notes";
 
 export interface Encounter {
   key: string;
@@ -95,7 +98,7 @@ const writeLast = (patch: { input?: string; sourceId?: number }) => {
   }
 };
 
-const pathFor = (view: View) => (view === "notes" ? "/notes" : "/");
+const pathFor = (view: View) => (view === "notes" ? "/notes" : view === "monk" ? "/monk" : "/");
 
 /** A pull the player sat out has no profile; an empty roster means the log did not say. */
 const playerWasIn = (fight: Fight, actorId: number | null) =>
@@ -142,7 +145,7 @@ async function streamSse(
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const view: View = pathname?.startsWith("/notes") ? "notes" : "player";
+  const view: View = pathname?.startsWith("/notes") ? "notes" : pathname?.startsWith("/monk") ? "monk" : "player";
 
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState<ReportSummary | null>(null);
@@ -175,7 +178,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [summary]);
 
   const encounters = useMemo(() => {
-    if (view !== "player" || actorId == null) return allEncounters;
+    if (!usesPlayerRun(view) || actorId == null) return allEncounters;
     return allEncounters
       .map((e) => ({ ...e, fights: e.fights.filter((f) => playerWasIn(f, actorId)) }))
       .filter((e) => e.fights.length > 0);
@@ -304,7 +307,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // A view with a finished analysis links to exactly that analysis, so the
       // address bar stays a shareable link after switching back to it. Only the
       // first page load reads `pulls` and auto-runs; in-app navigation never does.
-      const done = target === "player" ? player : raid;
+      const done = usesPlayerRun(target) ? player : raid;
       const ids = done.result ? done.fightIds : [...selected].sort((a, b) => a - b);
       return (
         pathFor(target) +
@@ -333,17 +336,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       try {
         const query = encodeState({
           report: summary.code,
-          source: view === "player" ? actorId ?? undefined : undefined,
+          source: usesPlayerRun(view) ? actorId ?? undefined : undefined,
           fight: fightIds[fightIds.length - 1],
           pulls: fightIds,
         });
         window.history.replaceState(null, "", pathFor(view) + query);
-        if (view === "player" && actorId != null) writeLast({ input, sourceId: actorId });
+        if (usesPlayerRun(view) && actorId != null) writeLast({ input, sourceId: actorId });
       } catch {
         // Non-fatal: the analysis matters more than the URL.
       }
 
-      if (view === "player") {
+      if (usesPlayerRun(view)) {
         if (actorId == null) return;
         setPlayer({ ...idle(), busy: true, fightIds });
         streamSse(
@@ -379,8 +382,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // once, as soon as the pickers it needs have filled in.
   useEffect(() => {
     const want = pending.current.run;
-    if (!want || want !== view || !summary || !activeEncounter || selected.size === 0) return;
-    if (view === "player" && actorId == null) return;
+    if (!want || usesPlayerRun(want) !== usesPlayerRun(view) || !summary || !activeEncounter || selected.size === 0) return;
+    if (usesPlayerRun(view) && actorId == null) return;
     pending.current.run = null;
     analyze();
   }, [view, summary, activeEncounter, selected, actorId, analyze]);

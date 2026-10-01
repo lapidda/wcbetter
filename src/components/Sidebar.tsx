@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { formatDuration } from "@/lib/model/stats";
-import { useWorkspace, type View } from "./Workspace";
+import { usesPlayerRun, useWorkspace, type View } from "./Workspace";
 
 const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
 
 const VIEWS: Array<{ view: View; label: string; hint: string }> = [
   { view: "player", label: "Player analysis", hint: "one DPS vs the top parses" },
+  { view: "monk", label: "Windwalker", hint: "button presses and burst windows" },
   { view: "notes", label: "Raid notes", hint: "what the raid keeps failing" },
 ];
 
@@ -29,7 +30,7 @@ export function Sidebar() {
     player,
     raid,
   } = ws;
-  const run = view === "player" ? player : raid;
+  const run = usesPlayerRun(view) ? player : raid;
   const [copied, setCopied] = useState(false);
 
   // DPS per pull, once the player analysis has seen it: makes "which pull was
@@ -37,7 +38,7 @@ export function Sidebar() {
   const dpsByFight = new Map((player.result?.pulls ?? []).map((p) => [p.fightId, p.dps]));
   const onScreen = new Set(run.result ? run.fightIds : []);
 
-  const needsPlayer = view === "player" && ws.actorId == null;
+  const needsPlayer = usesPlayerRun(view) && ws.actorId == null;
   const canRun = !!activeEncounter && selected.size > 0 && !needsPlayer && !run.busy;
 
   async function copyLink() {
@@ -100,7 +101,7 @@ export function Sidebar() {
         )}
       </section>
 
-      {summary && view === "player" && (
+      {summary && usesPlayerRun(view) && (
         <section className="side-section">
           <div className="side-label">Player</div>
           <select
@@ -125,7 +126,7 @@ export function Sidebar() {
           <div className="side-label">Boss</div>
           {ws.encounters.length === 0 && (
             <div className="muted" style={{ fontSize: 12 }}>
-              {view === "player" && ws.actorId != null
+              {usesPlayerRun(view) && ws.actorId != null
                 ? "This player was in no boss pulls."
                 : "No boss pulls in this report."}
             </div>
@@ -190,7 +191,7 @@ export function Sidebar() {
                       {f.kill ? <span style={{ color: "var(--good)" }}>kill</span> : `${f.bossPercentage?.toFixed(0) ?? "?"}%`}
                       {shortPulls.has(f.id) ? " · short" : ""}
                     </span>
-                    {dps != null && view === "player" && (
+                    {dps != null && usesPlayerRun(view) && (
                       <span className="mono" style={{ fontSize: 11 }}>
                         {k(dps)}
                       </span>

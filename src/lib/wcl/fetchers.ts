@@ -224,6 +224,31 @@ export async function getTalentsByActor(
   return byActor;
 }
 
+/**
+ * The same CombatantInfo events with ranks, in the shape the rankings use
+ * (`talentID`, `points`) — what a talent string needs. Same query, same cache
+ * entry, so it costs nothing once talents were read for the fight.
+ */
+export async function getTalentRanksByActor(
+  code: string,
+  fightId: number,
+): Promise<Record<number, Array<{ talentID: number; points: number }>>> {
+  const data = await query<{
+    reportData: { report: { events: { data: WclEvent[] } } };
+  }>(`combatantinfo:${code}:${fightId}`, COMBATANT_INFO, { code, fightIDs: [fightId] });
+
+  const byActor: Record<number, Array<{ talentID: number; points: number }>> = {};
+  for (const event of data.reportData.report.events.data ?? []) {
+    if (event.sourceID == null) continue;
+    const tree = (event.talentTree as Array<{ id?: number; rank?: number }> | undefined) ?? [];
+    const talents = tree
+      .map((t) => ({ talentID: Number(t.id), points: Number(t.rank ?? 1) }))
+      .filter((t) => Number.isFinite(t.talentID) && t.talentID > 0);
+    if (talents.length > 0) byActor[event.sourceID] = talents;
+  }
+  return byActor;
+}
+
 export async function getCharacterRankings(
   encounterID: number,
   opts: {
