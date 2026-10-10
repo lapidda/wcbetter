@@ -10,7 +10,8 @@ const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
 const VIEWS: Array<{ view: View; label: string; hint: string }> = [
   { view: "player", label: "Player analysis", hint: "one DPS vs the top parses" },
   { view: "monk", label: "Windwalker", hint: "button presses and burst windows" },
-  { view: "notes", label: "Raid notes", hint: "what the raid keeps failing" },
+  { view: "notes", label: "Raid", hint: "performance and callout notes" },
+  { view: "tanks", label: "Tanks", hint: "taunts, defensives, swap order" },
 ];
 
 /**

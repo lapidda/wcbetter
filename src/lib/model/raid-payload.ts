@@ -1,4 +1,6 @@
 import type { NotableMechanic } from "./notable";
+import type { RaidPerformance } from "./performance";
+import type { TankReport } from "./tanks";
 import type { RaidActor, RaidAnalysis, RaidRoster } from "./raid";
 
 // Pure, and deliberately in model/ rather than beside the orchestration in
@@ -27,6 +29,8 @@ export interface RaidPayload extends RaidReportMeta {
   notable: NotableMechanic[];
   stats: RaidAnalysis["stats"];
   totalRaidDamageTaken: number;
+  performance: RaidPerformance;
+  tanks: TankReport | null;
 }
 
 /** Rebuild the roster the pure generators want from what the wire carried. */

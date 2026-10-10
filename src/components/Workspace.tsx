@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { AnalysisReport, ReportSummary } from "@/lib/analyze";
 import type { RaidPayload } from "@/lib/model/raid-payload";
+import type { TankLookup } from "@/lib/tank-lookup";
 import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
 
 // One workspace behind both views. The report, the pickers and both analyses
@@ -21,10 +22,13 @@ import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
 // different pull from the sidebar without starting over.
 
 export type Fight = ReportSummary["fights"][number];
-export type View = "player" | "notes" | "monk";
+export type View = "player" | "notes" | "monk" | "tanks";
 
-/** The player analysis and the Windwalker view share one run: same analysis, different lens. */
-export const usesPlayerRun = (view: View) => view !== "notes";
+/**
+ * Two runs, each behind two views: the player analysis and the Windwalker view
+ * share one, the raid view and the tanks view the other.
+ */
+export const usesPlayerRun = (view: View) => view === "player" || view === "monk";
 
 export interface Encounter {
   key: string;
@@ -69,6 +73,18 @@ interface WorkspaceValue {
   analyze: (fightIds?: number[]) => void;
   /** Link to a view carrying the current report and selection. */
   hrefFor: (view: View) => string;
+
+  /** The tanks view's "top players" lookup — no report needed, kept across views. */
+  tankLookup: Run<TankLookup> & { args: TankLookupArgs | null };
+  lookupTank: (args: TankLookupArgs) => void;
+}
+
+export interface TankLookupArgs {
+  encounterID: number;
+  difficulty: number;
+  className: string;
+  specName: string;
+  pick?: number;
 }
 
 const Ctx = createContext<WorkspaceValue | null>(null);
@@ -98,7 +114,7 @@ const writeLast = (patch: { input?: string; sourceId?: number }) => {
   }
 };
 
-const pathFor = (view: View) => (view === "notes" ? "/notes" : view === "monk" ? "/monk" : "/");
+const pathFor = (view: View) => (view === "player" ? "/" : `/${view}`);
 
 /** A pull the player sat out has no profile; an empty roster means the log did not say. */
 const playerWasIn = (fight: Fight, actorId: number | null) =>
@@ -145,7 +161,13 @@ async function streamSse(
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const view: View = pathname?.startsWith("/notes") ? "notes" : pathname?.startsWith("/monk") ? "monk" : "player";
+  const view: View = pathname?.startsWith("/notes")
+    ? "notes"
+    : pathname?.startsWith("/monk")
+      ? "monk"
+      : pathname?.startsWith("/tanks")
+        ? "tanks"
+        : "player";
 
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState<ReportSummary | null>(null);
@@ -159,6 +181,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const [player, setPlayer] = useState<Run<AnalysisReport>>(idle);
   const [raid, setRaid] = useState<Run<RaidPayload>>(idle);
+  const [tankLookup, setTankLookup] = useState<Run<TankLookup> & { args: TankLookupArgs | null }>(() => ({ ...idle<TankLookup>(), args: null }));
+
+  const lookupTank = useCallback((args: TankLookupArgs) => {
+    setTankLookup({ ...idle<TankLookup>(), busy: true, args });
+    streamSse("/api/tank-lookup", args, {
+      progress: (m) => setTankLookup((r) => ({ ...r, progress: [...r.progress, m] })),
+      result: (data) => setTankLookup((r) => ({ ...r, result: data as TankLookup })),
+      error: (m) => setTankLookup((r) => ({ ...r, error: m })),
+    })
+      .catch((e) => setTankLookup((r) => ({ ...r, error: (e as Error).message })))
+      .finally(() => setTankLookup((r) => ({ ...r, busy: false })));
+  }, []);
 
   /** From a shared link: the pulls to select, and whether to run straight away. */
   const pending = useRef<{ pulls: number[] | null; run: View | null }>({ pulls: null, run: null });
@@ -409,6 +443,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     raid,
     analyze,
     hrefFor,
+    tankLookup,
+    lookupTank,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

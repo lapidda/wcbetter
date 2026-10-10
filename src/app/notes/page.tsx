@@ -24,12 +24,14 @@ import { emitNote, parseNote } from "@/lib/nsrt/note-syntax";
 import { rosterFromPayload } from "@/lib/model/raid-payload";
 import { MechanicTimeline, waveKey } from "@/components/MechanicTimeline";
 import { NoteEditor } from "@/components/NoteEditor";
+import { RaidPerformanceView } from "@/components/RaidPerformanceView";
 import { useWorkspace } from "@/components/Workspace";
 
 export default function Notes() {
   const { summary, raid } = useWorkspace();
   const { result: payload, busy, progress } = raid;
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"performance" | "note">("performance");
 
   const [caller, setCallerName] = useState("");
   const [includeNames, setIncludeNames] = useState(false);
@@ -175,9 +177,10 @@ export default function Notes() {
 
   return (
     <div className="wrap">
-      <h1 style={{ fontSize: 26, margin: "0 0 4px" }}>Raid notes</h1>
+      <h1 style={{ fontSize: 26, margin: "0 0 4px" }}>Raid</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        What the raid keeps failing, as a callout sheet for whoever is running it.
+        How every player did with the mechanics they carried, and what the raid keeps failing as a
+        callout sheet.
         {!summary && " Load a report in the sidebar to start."}
         {summary && !payload && !busy && " Pick a boss and its pulls in the sidebar, then press Analyse."}
       </p>
@@ -200,6 +203,30 @@ export default function Notes() {
       )}
 
       {payload && !busy && (
+        <div className="tabs" role="tablist" style={{ marginTop: 14 }}>
+          {(
+            [
+              ["performance", "Performance"],
+              ["note", "Callout note"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              className={tab === id ? "active" : undefined}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {payload && !busy && tab === "performance" && <RaidPerformanceView payload={payload} />}
+
+      {payload && !busy && tab === "note" && (
         <>
           <div className="panel" style={{ marginTop: 14 }}>
             <div className="section-head">

@@ -22,7 +22,7 @@ excluded, with a reason), and you press one button. `▸` next to a pull analyse
 trying a different pull never means going back to a form.
 
 The sidebar switches between the views — **Player analysis**, **Windwalker** ([Windwalker](#windwalker),
-a Monk-specific lens on the same run) and **Raid notes** ([Raid notes](#raid-notes)) — and they share
+a Monk-specific lens on the same run), **Raid** ([performance](#raid-performance) and [notes](#raid-notes)) and **Tanks** ([Tanks](#tanks)) — and they share
 the loaded report, the selection and each other's finished results, so flipping between them
 re-fetches nothing. Once the player analysis has run, each pull in
 the list shows its DPS.
@@ -367,6 +367,80 @@ Three rules that look obvious were measured against the top parses and changed:
   top parses press Tiger Palm in the tail of the window.
 
 Shado-Pan gets the universal checks only; the burst-window rules are Conduit's.
+
+## Raid performance
+
+The **Raid** view opens on a **Performance** tab (the callout note is the second tab): every player's
+DPS — HPS for healers — next to the boss mechanics they carried, so "low because they were doing the
+orbs" and "low with nothing to explain it" stop looking the same. It is an overview, not a verdict.
+
+Per player: output, active time, the mechanics they carried, seconds per pull under a mechanic debuff,
+deaths, hits from avoidable mechanics, and a one-line reading for DPS players — *low DPS, carried an
+assigned mechanic* against *low DPS, no extra mechanic load*.
+
+Mechanics come from boss-applied debuffs on players (`src/lib/model/performance.ts`), classified by
+*who gets them*, with no per-boss list:
+
+| kind | pattern | Mythic Sszorak |
+|---|---|---|
+| assigned | one or two non-tank players take most of it | Serpent's Fury — 18 of 26 on one player |
+| targeted | a few at a time, rotating through the raid | Raging Crosswinds, Tempest |
+| tank | 80%+ on the tanks; busters splash onto melee | Ravage, Corroding Venom |
+| raid-wide | most of the raid at once — nobody's job | Viscous Cyst |
+
+Most targeted mechanics rotate through everyone about equally — every player had Virulence 2-3 times
+a pull — so a player is only *credited* with a mechanic when they carried it: an assignee of an
+assigned one (25%+ of it), or 1.5x the raid's median of a targeted one. Everyone's total time under
+mechanics stays visible as a number.
+
+Roles come from the spec in the log. The raid notes' derived tank test (who eats the boss's melee)
+found no tanks on that Mythic night, and a Blood Death Knight's self-healing then read as a healer, so
+the five tank and five healer specs are the one list here, with the derived test as the fallback. Its
+cost is one Healing table and one debuff event stream per pull; damage done is usually cached already.
+
+The log cannot tell a debuff you were given from one you walked into, unless the raid notes found it
+avoidable — the page says so.
+
+## Tanks
+
+`/tanks` shares the raid run, so switching from the Raid view costs nothing. Pick a tank and a pull to
+see, against the boss's own casts: the swap debuff's stacks on both tanks, every taunt, every personal
+cooldown and external, and every tank-buster hit with what was up when it landed. The code is
+`src/lib/model/tanks.ts`.
+
+Derived from the log, with no per-boss list:
+
+- **The swap debuff** — a boss debuff that stacks and lands on tanks 80%+ of the time (Mythic Sszorak:
+  Corroding Venom).
+- **First and second tank** — whoever gets that debuff first, counted over the pulls ("first on 5 of 6").
+- **Swap taunts** — a taunt while the other tank has 2+ stacks and more than the taunter, with the
+  count it went out at. Read from the taunt rather than from the debuff moving: on Sszorak a taunt at 13
+  stacks came 25s before the debuff first reached the new tank, because only some of the boss's hits
+  apply it. A swap taunt three or more stacks past that tank's usual count is marked late.
+- **Tank busters** — boss abilities whose hits land on tanks 80%+ of the time. Auto-attacks are left
+  out by name (WarcraftLogs calls every one "Melee"): a boss that swings in bursts slips under any
+  rate test.
+
+Known, because it is fixed per class: which buttons are taunts, and which are tank cooldowns and
+externals (rotational mitigation such as Shield Block is not a cooldown). Defensive windows come from
+the Buffs table's exact bands. Holy Bulwark is left out — a Templar absorb cast ~20 times a pull would
+make every hit look covered.
+
+**Add to the callout note** writes first/second-tank lines, a taunt call per swap taunt (`Taunt
+(Corroding Venom 6)`) and a defensive call two seconds before each buster, timed from one pull — the
+kill when there is one. They land in the Raid view's note as hand-added lines; exporting again replaces
+the earlier tank lines instead of doubling them. Hand-added lines are now saved with the note, which
+they were not before.
+
+**Top players**, the second tab, needs no report: pick a tank spec, a raid, a boss and a difficulty, and
+it opens the highest-DPS ranked log for that spec (any of the top ten on request) in the same view,
+on the ranked tank — their co-tank is in the same fight, so swaps and taunt stacks read exactly as for
+your own raid. For a tank the ranking barely matters; any top log shows the job being done. The note
+export is hidden there, since it is someone else's raid. Cost: one rankings page, then the same
+single-fight raid analysis, cached like everything else (`src/lib/tank-lookup.ts`).
+
+Cost: per tank per pull, a Casts table, the cast events and a Buffs table — the same three a player
+analysis fetches, so often already cached.
 
 ## Raid notes
 
