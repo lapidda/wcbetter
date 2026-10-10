@@ -897,3 +897,49 @@ table.abilities tr.flagged td {
 table.abilities tbody tr:last-child td {
   border-bottom: 0;
 }
+
+/* Raid buff value. */
+.bv-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.bv-big {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.bv-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.bv-facts > :nth-child(odd) {
+  color: var(--muted);
+}
+
+.bv-split {
+  display: flex;
+  height: 14px;
+  min-width: 120px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
+.bv-split > .phys { background: #c69b6d; }
+.bv-split > .mixed { background: #bb9af7; }
+.bv-split > .magic { background: var(--info); }
+
+.bv-key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin: 0 4px 0 10px;
+}

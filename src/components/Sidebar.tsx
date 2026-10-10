@@ -12,6 +12,7 @@ const VIEWS: Array<{ view: View; label: string; hint: string }> = [
   { view: "monk", label: "Windwalker", hint: "button presses and burst windows" },
   { view: "notes", label: "Raid", hint: "performance and callout notes" },
   { view: "tanks", label: "Tanks", hint: "taunts, defensives, swap order" },
+  { view: "buffs", label: "Raid buffs", hint: "what each raid buff is worth" },
 ];
 
 /**
@@ -30,8 +31,9 @@ export function Sidebar() {
     shortPulls,
     player,
     raid,
+    buffs,
   } = ws;
-  const run = usesPlayerRun(view) ? player : raid;
+  const run = usesPlayerRun(view) ? player : view === "buffs" ? buffs : raid;
   const [copied, setCopied] = useState(false);
 
   // DPS per pull, once the player analysis has seen it: makes "which pull was

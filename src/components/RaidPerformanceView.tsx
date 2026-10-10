@@ -6,7 +6,7 @@ import type { RaidPayload } from "@/lib/model/raid-payload";
 const k = (n: number) => `${(n / 1000).toFixed(0)}k`;
 
 /** The game's class colours, for reading the table at a glance. Display only. */
-const CLASS_COLOUR: Record<string, string> = {
+export const CLASS_COLOUR: Record<string, string> = {
   DeathKnight: "#C41E3A",
   DemonHunter: "#A330C9",
   Druid: "#FF7C0A",

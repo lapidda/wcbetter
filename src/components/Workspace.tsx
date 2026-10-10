@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AnalysisReport, ReportSummary } from "@/lib/analyze";
+import type { BuffValuePayload } from "@/lib/model/buff-value";
 import type { RaidPayload } from "@/lib/model/raid-payload";
 import type { TankLookup } from "@/lib/tank-lookup";
 import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
@@ -22,7 +23,7 @@ import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
 // different pull from the sidebar without starting over.
 
 export type Fight = ReportSummary["fights"][number];
-export type View = "player" | "notes" | "monk" | "tanks";
+export type View = "player" | "notes" | "monk" | "tanks" | "buffs";
 
 /**
  * Two runs, each behind two views: the player analysis and the Windwalker view
@@ -69,6 +70,8 @@ interface WorkspaceValue {
 
   player: Run<AnalysisReport>;
   raid: Run<RaidPayload>;
+  /** The raid buff view's own run: it reads every damage event, which the raid run never needs. */
+  buffs: Run<BuffValuePayload>;
   /** Run the current view's analysis, on the given pulls or the ticked ones. */
   analyze: (fightIds?: number[]) => void;
   /** Link to a view carrying the current report and selection. */
@@ -167,7 +170,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ? "monk"
       : pathname?.startsWith("/tanks")
         ? "tanks"
-        : "player";
+        : pathname?.startsWith("/buffs")
+          ? "buffs"
+          : "player";
 
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState<ReportSummary | null>(null);
@@ -181,6 +186,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const [player, setPlayer] = useState<Run<AnalysisReport>>(idle);
   const [raid, setRaid] = useState<Run<RaidPayload>>(idle);
+  const [buffs, setBuffs] = useState<Run<BuffValuePayload>>(idle);
   const [tankLookup, setTankLookup] = useState<Run<TankLookup> & { args: TankLookupArgs | null }>(() => ({ ...idle<TankLookup>(), args: null }));
 
   const lookupTank = useCallback((args: TankLookupArgs) => {
@@ -256,6 +262,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setShortPulls(new Set());
     setPlayer(idle());
     setRaid(idle());
+    setBuffs(idle());
 
     try {
       const res = await fetch(`/api/report?input=${encodeURIComponent(value)}`);
@@ -341,7 +348,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // A view with a finished analysis links to exactly that analysis, so the
       // address bar stays a shareable link after switching back to it. Only the
       // first page load reads `pulls` and auto-runs; in-app navigation never does.
-      const done = usesPlayerRun(target) ? player : raid;
+      const done = usesPlayerRun(target) ? player : target === "buffs" ? buffs : raid;
       const ids = done.result ? done.fightIds : [...selected].sort((a, b) => a - b);
       return (
         pathFor(target) +
@@ -353,7 +360,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         })
       );
     },
-    [summary, selected, actorId, player, raid],
+    [summary, selected, actorId, player, raid, buffs],
   );
 
   const analyze = useCallback(
@@ -394,6 +401,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         )
           .catch((e) => setPlayer((r) => ({ ...r, error: (e as Error).message })))
           .finally(() => setPlayer((r) => ({ ...r, busy: false })));
+      } else if (view === "buffs") {
+        setBuffs({ ...idle(), busy: true, fightIds });
+        streamSse(
+          "/api/buffs",
+          { code: summary.code, fightIds },
+          {
+            progress: (m) => setBuffs((r) => ({ ...r, progress: [...r.progress, m] })),
+            result: (data) => setBuffs((r) => ({ ...r, result: data as BuffValuePayload })),
+            error: (m) => setBuffs((r) => ({ ...r, error: m })),
+          },
+        )
+          .catch((e) => setBuffs((r) => ({ ...r, error: (e as Error).message })))
+          .finally(() => setBuffs((r) => ({ ...r, busy: false })));
       } else {
         setRaid({ ...idle(), busy: true, fightIds });
         streamSse(
@@ -441,6 +461,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     shortPulls,
     player,
     raid,
+    buffs,
     analyze,
     hrefFor,
     tankLookup,

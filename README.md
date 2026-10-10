@@ -22,7 +22,7 @@ excluded, with a reason), and you press one button. `▸` next to a pull analyse
 trying a different pull never means going back to a form.
 
 The sidebar switches between the views — **Player analysis**, **Windwalker** ([Windwalker](#windwalker),
-a Monk-specific lens on the same run), **Raid** ([performance](#raid-performance) and [notes](#raid-notes)) and **Tanks** ([Tanks](#tanks)) — and they share
+a Monk-specific lens on the same run), **Raid** ([performance](#raid-performance) and [notes](#raid-notes)), **Tanks** ([Tanks](#tanks)) and **Raid buffs** ([Raid buffs](#raid-buffs)) — and they share
 the loaded report, the selection and each other's finished results, so flipping between them
 re-fetches nothing. Once the player analysis has run, each pull in
 the list shows its DPS.
@@ -441,6 +441,50 @@ single-fight raid analysis, cached like everything else (`src/lib/tank-lookup.ts
 
 Cost: per tank per pull, a Casts table, the cast events and a Buffs table — the same three a player
 analysis fetches, so often already cached.
+
+## Raid buffs
+
+What each raid buff and debuff was actually worth on the selected pulls, and the DPS a swap-in would
+need to replace the player who brings it.
+
+| Aura | Brought by | Effect | How it is valued |
+|---|---|---|---|
+| Mystic Touch | Monk | +5% physical damage taken | measured |
+| Chaos Brand | Demon Hunter | +3% damage taken | measured |
+| Hunter's Mark | Hunter | +3% damage taken | measured |
+| Arcane Intellect | Mage | +3% Intellect | estimate, Intellect users only |
+| Battle Shout | Warrior | +5% attack power | estimate, Strength/Agility users only |
+| Mark of the Wild | Druid | +3% Versatility | estimate |
+| Skyfury | Shaman | +2% Mastery | uptime only, not valued |
+
+Nothing here is a guess about a spec's "physical share". Every damage event of the raid is sorted by
+the school mask WCL stores on its ability (bleeds and auto attacks are physical; Chaos and Shadowstrike
+are mixed and overlap physical), and each hit is checked against the auras that were actually up when it
+landed:
+
+- **Debuffs on the enemy** count only if they were on *that* target, from the debuff's own apply/remove
+  events, so a boss that spawns mid-pull, or an add the monk never touched, is valued correctly.
+- **Buffs on players** count only while the attacker had them: the auras each player started the pull with
+  (CombatantInfo) plus the buff's apply/remove events, so a player who died and was battle-rezzed without
+  a recast loses it from then on. Pets use their owner's buffs. Who benefits is decided by the primary
+  stat from CombatantInfo (the highest of Strength, Agility and Intellect), so Devourer Demon Hunters
+  count for Arcane Intellect and Havoc ones for Battle Shout without a spec table.
+
+A logged hit already contains the bonus, so the loss is v/(1+v) of it. Pets count toward their owner
+and absorbed damage counts.
+
+The stat buffs are **upper bounds**: they assume damage scales 1:1 with the stat, and Mark of the Wild
+ignores the player's own Versatility. The log cannot tell how much of a hit came from the stat.
+Skyfury's 2% Mastery is worth something different for every spec, so it only shows its uptime.
+
+**Swapping a player out** lists every player who is the only source of at least one aura: their own DPS
+plus what their auras gave everyone else is what a swap-in without those auras must do. With two
+providers (two Demon Hunters) one can go without losing the aura, so no break-even is shown.
+
+Cost: every damage event of every selected pull (around 75k events, eight pages, on a
+seven-minute Mythic pull), CombatantInfo, and one small aura query per tracked aura per pull. It is its
+own run so the raid notes never pay for it. To value another aura, add a row to `RAID_BUFFS` in
+`src/lib/model/buff-value.ts`.
 
 ## Raid notes
 

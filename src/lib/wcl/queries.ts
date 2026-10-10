@@ -162,3 +162,61 @@ export const REPORT_GRAPH = /* GraphQL */ `
     }
   }
 `;
+
+/**
+ * Every actor (pets and NPCs too, so pet damage folds into its owner and enemy
+ * targets are recognisable) and every ability with its school mask in `type`.
+ * Separate from REPORT_META so that document's hash, and so its cache, is untouched.
+ */
+export const REPORT_ACTORS_ABILITIES = /* GraphQL */ `
+  query ReportActorsAbilities($code: String!) {
+    reportData {
+      report(code: $code) {
+        masterData {
+          actors {
+            id
+            name
+            type
+            subType
+            petOwner
+          }
+          abilities {
+            gameID
+            name
+            type
+          }
+        }
+      }
+    }
+  }
+`;
+
+/** One aura's apply/remove events, by ability id — a few hundred rows instead of every debuff in the fight. */
+export const AURA_EVENTS = /* GraphQL */ `
+  query AuraEvents(
+    $code: String!
+    $fightIDs: [Int]!
+    $dataType: EventDataType!
+    $abilityID: Float!
+    $hostilityType: HostilityType
+    $startTime: Float!
+    $endTime: Float!
+  ) {
+    reportData {
+      report(code: $code) {
+        events(
+          fightIDs: $fightIDs
+          dataType: $dataType
+          abilityID: $abilityID
+          hostilityType: $hostilityType
+          startTime: $startTime
+          endTime: $endTime
+          limit: 10000
+        ) {
+          data
+          nextPageTimestamp
+        }
+      }
+    }
+  }
+`;

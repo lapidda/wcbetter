@@ -1,9 +1,11 @@
 import { query } from "./client";
 import {
+  AURA_EVENTS,
   CHARACTER_RANKINGS,
   COMBATANT_INFO,
   REPORT_EVENTS,
   REPORT_GRAPH,
+  REPORT_ACTORS_ABILITIES,
   REPORT_META,
   REPORT_TABLE,
 } from "./queries";
@@ -305,4 +307,73 @@ export async function getDamageGraph(
     | undefined;
 
   return payload?.series?.find((s) => s.name === "Total") ?? null;
+}
+
+export interface MasterActor {
+  id: number;
+  name: string;
+  type: string;
+  subType: string;
+  petOwner: number | null;
+}
+
+/** All actors, pets and NPCs included, and every ability's school mask (WCL's ability `type`). */
+export async function getActorsAndAbilities(code: string): Promise<{
+  actors: MasterActor[];
+  schools: Record<number, number>;
+}> {
+  const data = await query<{
+    reportData: {
+      report: {
+        masterData: {
+          actors: MasterActor[];
+          abilities: Array<{ gameID: number; name: string; type: string | number }>;
+        };
+      };
+    };
+  }>(`actors-abilities:${code}`, REPORT_ACTORS_ABILITIES, { code });
+  const master = data.reportData.report.masterData;
+  // `type` arrives as a string ("1", "127"); the bit tests need a number.
+  const schools = Object.fromEntries(master.abilities.map((a) => [a.gameID, Number(a.type) || 0]));
+  return { actors: master.actors, schools };
+}
+
+/** One aura's events on one pull, paginated like getEvents. */
+export async function getAuraEvents(
+  code: string,
+  fightId: number,
+  dataType: "Buffs" | "Debuffs",
+  abilityID: number,
+  window: { start: number; end: number },
+  hostilityType?: "Friendlies" | "Enemies",
+): Promise<WclEvent[]> {
+  const all: WclEvent[] = [];
+  let start = window.start;
+  for (let page = 0; page < 25; page++) {
+    const key = `aura:${code}:${fightId}:${dataType}:${abilityID}:${hostilityType ?? "-"}:${start}`;
+    const data = await query<{
+      reportData: { report: { events: { data: WclEvent[]; nextPageTimestamp: number | null } } };
+    }>(key, AURA_EVENTS, {
+      code,
+      fightIDs: [fightId],
+      dataType,
+      abilityID,
+      hostilityType: hostilityType ?? null,
+      startTime: start,
+      endTime: window.end,
+    });
+    const page_ = data.reportData.report.events;
+    all.push(...(page_.data ?? []));
+    if (!page_.nextPageTimestamp || page_.nextPageTimestamp >= window.end) break;
+    start = page_.nextPageTimestamp;
+  }
+  return all;
+}
+
+/** CombatantInfo for one pull, raw: primary stats and the auras each player started with. */
+export async function getCombatantInfo(code: string, fightId: number): Promise<WclEvent[]> {
+  const data = await query<{
+    reportData: { report: { events: { data: WclEvent[] } } };
+  }>(`combatantinfo:${code}:${fightId}`, COMBATANT_INFO, { code, fightIDs: [fightId] });
+  return data.reportData.report.events.data ?? [];
 }
