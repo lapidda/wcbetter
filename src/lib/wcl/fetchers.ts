@@ -3,6 +3,7 @@ import {
   AURA_EVENTS,
   CHARACTER_RANKINGS,
   COMBATANT_INFO,
+  CASTS_WITH_RESOURCES,
   REPORT_EVENTS,
   REPORT_GRAPH,
   REPORT_ACTORS_ABILITIES,
@@ -321,6 +322,7 @@ export interface MasterActor {
 export async function getActorsAndAbilities(code: string): Promise<{
   actors: MasterActor[];
   schools: Record<number, number>;
+  names: Record<number, string>;
 }> {
   const data = await query<{
     reportData: {
@@ -335,7 +337,8 @@ export async function getActorsAndAbilities(code: string): Promise<{
   const master = data.reportData.report.masterData;
   // `type` arrives as a string ("1", "127"); the bit tests need a number.
   const schools = Object.fromEntries(master.abilities.map((a) => [a.gameID, Number(a.type) || 0]));
-  return { actors: master.actors, schools };
+  const names = Object.fromEntries(master.abilities.map((a) => [a.gameID, a.name]));
+  return { actors: master.actors, schools, names };
 }
 
 /** One aura's events on one pull, paginated like getEvents. */
@@ -376,4 +379,29 @@ export async function getCombatantInfo(code: string, fightId: number): Promise<W
     reportData: { report: { events: { data: WclEvent[] } } };
   }>(`combatantinfo:${code}:${fightId}`, COMBATANT_INFO, { code, fightIDs: [fightId] });
   return data.reportData.report.events.data ?? [];
+}
+
+/**
+ * One player's casts with their resources: Energy on every cast, Chi on the
+ * casts that spend it. One page for a whole pull.
+ */
+export async function getCastsWithResources(
+  code: string,
+  fightId: number,
+  sourceID: number,
+  window: { start: number; end: number },
+): Promise<WclEvent[]> {
+  const all: WclEvent[] = [];
+  let start = window.start;
+  for (let page = 0; page < 25; page++) {
+    const key = `casts-res:${code}:${fightId}:${sourceID}:${start}`;
+    const data = await query<{
+      reportData: { report: { events: { data: WclEvent[]; nextPageTimestamp: number | null } } };
+    }>(key, CASTS_WITH_RESOURCES, { code, fightIDs: [fightId], sourceID, startTime: start, endTime: window.end });
+    const page_ = data.reportData.report.events;
+    all.push(...(page_.data ?? []));
+    if (!page_.nextPageTimestamp || page_.nextPageTimestamp >= window.end) break;
+    start = page_.nextPageTimestamp;
+  }
+  return all;
 }

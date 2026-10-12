@@ -368,6 +368,48 @@ Three rules that look obvious were measured against the top parses and changed:
 
 Shado-Pan gets the universal checks only; the burst-window rules are Conduit's.
 
+### Priority list
+
+On Conduit, every press is also checked against Peak of Serenity's Conduit single-target priority
+(patch 12.1), and the lines are ranked by how much more often you break them than the top parses on
+the same boss (`src/lib/spec/windwalker-priority.ts`). A press is only counted when the log *proves* a
+higher line applied:
+
+| # | Line | How it is proven |
+|---|---|---|
+| 1 | Whirling Dragon Punch if Xuen is more than 10s away | Xuen's next press |
+| 2 | Celestial Conduit if no Heart of the Jade Serpent from Whirling Dragon Punch is up | the buff; which Heart of the Jade Serpent id comes from Whirling Dragon Punch is read from the log |
+| 5 | Tiger Palm if Energy would cap outside Zenith and Bloodlust | Energy on every cast |
+| 7 | Rushing Wind Kick when its proc is up | the proc buff |
+| 8 | Spinning Crane Kick with Unbroken Rhythm (Season 2 four-piece) | the buff |
+| 10 | Blackout Kick with Combo Breaker | the Blackout Kick! buff |
+| 13 | Spinning Crane Kick with Dance of Chi-Ji | the buff |
+
+A proc that runs out unused also counts against its line. Everything the log cannot see is given the
+benefit of the doubt: Fists of Fury and Rising Sun Kick readiness (procs reset their cooldowns — Fists of
+Fury was measured 4.2s apart), and Chi between spenders (the log has Chi only on presses that spend it).
+So a Tiger Palm with a Blackout Kick! up is only marked when the last spender proves there was Chi for
+Fists of Fury, and the lines that depend on those are listed as not checked rather than guessed. A
+press that would repeat the previous button is never asked for, since it would break Combo Strikes.
+
+The list is single-target. On a boss with several targets the top parses break it too — Crane Kick
+over a Blackout Kick! proc, mostly — and ranking by the excess over them absorbs that. Skipped lines are
+marked on the press in the press list; wasted procs are listed by time.
+
+Cost: per pull and per top parse, the casts with resources and the player's buff events (one page
+each) and the report's ability list.
+
+### Guide lists
+
+The tab also shows all six of Peak of Serenity's priority lists — single target, single target
+advanced and AoE, for Conduit and Shado-Pan — in short wording, in the guide's order, linked to the
+guide (`src/lib/spec/windwalker-guide.ts`). The guide says to skip steps your build does not use, so
+lines that name a button, buff or talent are crossed out when the log shows you do not have it: a
+button never cast or dealing damage on these pulls (Strike of the Windlord, Slicing Winds), a buff never
+had (Unbroken Rhythm, the Season 2 four-piece), a talent not picked (Obsidian Spiral). Click any line
+to cross it out or bring it back; the remaining lines renumber, your choices are kept in this browser,
+and lines crossed out of the default Conduit list are hidden from the priority check above.
+
 ## Raid performance
 
 The **Raid** view opens on a **Performance** tab (the callout note is the second tab): every player's

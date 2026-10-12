@@ -943,3 +943,102 @@ table.abilities tbody tr:last-child td {
   border-radius: 2px;
   margin: 0 4px 0 10px;
 }
+
+/* Windwalker priority list. */
+table.pr-table td,
+table.pr-table th {
+  vertical-align: middle;
+}
+
+tr.pr-row.bad td:first-child { box-shadow: inset 3px 0 0 var(--critical); }
+tr.pr-row.warn td:first-child { box-shadow: inset 3px 0 0 var(--minor); }
+tr.pr-row.good td:first-child { box-shadow: inset 3px 0 0 var(--good); }
+
+.pr-excess.bad { color: var(--critical); }
+.pr-excess.warn { color: var(--minor); }
+.pr-excess.good { color: var(--muted); }
+
+.pr-bars {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.pr-bar {
+  height: 5px;
+  border-radius: 2px;
+  min-width: 1px;
+}
+
+.pr-bar.you { background: var(--accent); }
+.pr-bar.top { background: var(--muted); opacity: 0.6; }
+
+/* Windwalker guide lists. */
+ol.wg-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+ol.wg-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.wg-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 4px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wg-line:hover {
+  background: var(--panel-2);
+}
+
+.wg-num {
+  width: 22px;
+  flex: none;
+  text-align: right;
+  color: var(--accent);
+}
+
+.wg-text {
+  flex: 1;
+}
+
+.wg-x {
+  flex: none;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.wg-line:hover .wg-x {
+  opacity: 1;
+}
+
+ol.wg-list li.out .wg-text {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+
+ol.wg-list li.out .wg-num {
+  color: var(--muted);
+}
+
+.wg-why {
+  font-size: 11px;
+  color: var(--minor);
+}
+
+.side-mini.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}

@@ -220,3 +220,25 @@ export const AURA_EVENTS = /* GraphQL */ `
     }
   }
 `;
+
+/** One player's casts with `includeResources`: Energy on every cast, Chi on the spenders. */
+export const CASTS_WITH_RESOURCES = /* GraphQL */ `
+  query CastsWithResources($code: String!, $fightIDs: [Int]!, $sourceID: Int!, $startTime: Float!, $endTime: Float!) {
+    reportData {
+      report(code: $code) {
+        events(
+          fightIDs: $fightIDs
+          dataType: Casts
+          sourceID: $sourceID
+          includeResources: true
+          startTime: $startTime
+          endTime: $endTime
+          limit: 10000
+        ) {
+          data
+          nextPageTimestamp
+        }
+      }
+    }
+  }
+`;

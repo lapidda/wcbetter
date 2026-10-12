@@ -27,6 +27,8 @@
 import { DOUBLE_LOG_MS, extraKind } from "@/lib/model/opener";
 import { median } from "@/lib/model/stats";
 import type { PlayerProfile, ReferenceProfile } from "@/lib/model/types";
+import type { BuildEvidence } from "./windwalker-guide";
+import type { PrioritySummary } from "./windwalker-priority";
 
 export const WW = {
   TP: "Tiger Palm",
@@ -83,7 +85,8 @@ export interface Mark {
     | "wdp-before-xuen"
     | "conduit-overlap"
     | "conduit-timing"
-    | "no-zenith-with-xuen";
+    | "no-zenith-with-xuen"
+    | "priority";
   note: string;
 }
 
@@ -171,6 +174,13 @@ export interface WindwalkerReport {
     afterFof: { you: Record<string, number>; top: Record<string, number> };
     afterWdp: { you: Record<string, number>; top: Record<string, number> };
   };
+  /**
+   * The guide's Conduit priority, which line you break most against the top
+   * parses. Null off Conduit, or when the resource events could not be read.
+   */
+  priority: PrioritySummary | null;
+  /** What the log shows of the build, for crossing out guide lines that do not apply. */
+  build: BuildEvidence;
 }
 
 // --- Detection ------------------------------------------------------------------
@@ -468,6 +478,8 @@ export function buildWindwalkerReport(
       afterFof: { you: mergeShares(you.map((m) => m.afterFof)), top: mergeShares(top.map((m) => m.afterFof)) },
       afterWdp: { you: mergeShares(you.map((m) => m.afterWdp)), top: mergeShares(top.map((m) => m.afterWdp)) },
     },
+    priority: null,
+    build: { casts: [], buffs: [], talents: null },
   };
 }
 

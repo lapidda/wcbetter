@@ -5,6 +5,8 @@ import { buildAbilityRows, type AbilityRow } from "./model/abilities";
 import { buildCastComparison, type CastComparison } from "./model/cast-compare";
 import { buildOpenerComparison, type OpenerComparison } from "./model/opener";
 import { buildWindwalkerReport, type WindwalkerReport } from "./spec/windwalker";
+import { markPriority, priorityViolations, summarizePriority } from "./spec/windwalker-priority";
+import { loadPriorityInput } from "./windwalker-priority-data";
 import { mechanicBefore } from "./model/encounter";
 import { focusGain, sectionize, selectFocus, type FindingFamily, type FocusItem } from "./model/focus";
 import { buildPlayerProfile } from "./model/profile";
@@ -228,6 +230,8 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
   // The rankings page is the one the reference set was chosen from (cached),
   // and the player's ranks come from the CombatantInfo already read for pull 1.
   let talentBuilds: TalentBuilds | null = null;
+  /** Your talents by name, for the Windwalker guide lists; null when the log had none. */
+  let talentNames: string[] | null = null;
   const buildWarnings: string[] = [];
   if (className && specName) {
     try {
@@ -241,6 +245,10 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
         });
         const mine = (await getTalentRanksByActor(args.code, fights[0].id))[actor.id] ?? null;
         talentBuilds = buildTalentBuilds(tree, rankings, mine);
+        if (mine?.length) {
+          const picked = new Set(mine.filter((t) => t.points > 0).map((t) => t.talentID));
+          talentNames = Object.values(tree.nodes).flatMap((n) => n.entries.filter((e) => picked.has(e.id)).map((e) => e.name));
+        }
       }
     } catch (error) {
       buildWarnings.push(`Talent builds unavailable: ${(error as Error).message}`);
@@ -303,6 +311,46 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
     lanes.map((l, i) => ({ ...l, startTime: fights[i].startTime })),
     reference,
   );
+  if (windwalker) {
+    // What the log shows of the build, so the guide's lists can cross out
+    // lines it cannot use: buttons never pressed, buffs never had, talents not picked.
+    windwalker.build = {
+      // Cast or did damage: some buttons (Zenith Stomp) log no cast event of their own.
+      casts: [
+        ...new Set(
+          profiled.flatMap((p) =>
+            Object.values(p.profile.abilities)
+              .filter((a) => a.casts > 0 || a.damage > 0)
+              .map((a) => a.name),
+          ),
+        ),
+      ],
+      buffs: [...new Set(profiled.flatMap((p) => Object.values(p.profile.buffs).map((b) => b.name)))],
+      talents: talentNames,
+    };
+  }
+  if (windwalker?.tree === "conduit") {
+    // The guide's priority, press by press: needs Energy, Chi and the player's
+    // procs, which nothing else in the analysis reads.
+    progress("Checking the Conduit priority list...");
+    try {
+      const [mine, refs] = await Promise.all([
+        Promise.all(profiled.map((p) => loadPriorityInput(p.profile))),
+        Promise.all(reference.members.map((m) => loadPriorityInput(m).catch(() => null))),
+      ]);
+      const yours = windwalker.pulls.flatMap((pull, i) => {
+        const input = mine[i];
+        if (!input) return [];
+        const violations = priorityViolations(input);
+        markPriority(pull.presses, violations);
+        return [{ fightId: pull.fightId, label: pull.label, durationMs: input.durationMs, violations }];
+      });
+      const top = refs.flatMap((input) => (input ? [{ durationMs: input.durationMs, violations: priorityViolations(input) }] : []));
+      windwalker.priority = summarizePriority(yours, top);
+    } catch (error) {
+      warnings.push(`Priority check unavailable: ${(error as Error).message}`);
+    }
+  }
 
   return {
     report: { code: meta.code, title: meta.title },
