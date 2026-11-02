@@ -252,22 +252,36 @@ export async function getTalentRanksByActor(
   return byActor;
 }
 
-export async function getCharacterRankings(
-  encounterID: number,
-  opts: {
-    className?: string;
-    specName?: string;
-    difficulty?: number;
-    metric?: "dps" | "hps" | "bossdps";
-    page?: number;
-  },
-): Promise<RankingRow[]> {
-  const key = `rankings:${encounterID}:${opts.className ?? "-"}:${opts.specName ?? "-"}:${
-    opts.difficulty ?? "-"
-  }:${opts.metric ?? "dps"}:${opts.page ?? 1}`;
+export interface RankingOptions {
+  className?: string;
+  specName?: string;
+  difficulty?: number;
+  metric?: "dps" | "hps" | "bossdps";
+  page?: number;
+}
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Unlike a log, rankings change every time someone kills the boss, so their
+ * cache entries carry a time bucket and expire with it. Without one, a page
+ * fetched in September is still "the top parses" in November.
+ */
+export function rankingsKey(
+  encounterID: number,
+  opts: RankingOptions,
+  freshness: "week" | "day",
+  now: number = Date.now(),
+): string {
+  const bucket = freshness === "week" ? `w${Math.floor(now / (7 * DAY_MS))}` : `d${Math.floor(now / DAY_MS)}`;
+  return `rankings:${encounterID}:${opts.className ?? "-"}:${opts.specName ?? "-"}:${
+    opts.difficulty ?? "-"
+  }:${opts.metric ?? "dps"}:${opts.page ?? 1}:${bucket}`;
+}
+
+async function rankingsPage(key: string, encounterID: number, opts: RankingOptions) {
   const data = await query<{
-    worldData: { encounter: { characterRankings: { rankings?: RankingRow[] } } | null };
+    worldData: { encounter: { characterRankings: { rankings?: RankingRow[]; hasMorePages?: boolean } } | null };
   }>(key, CHARACTER_RANKINGS, {
     encounterID,
     className: opts.className ?? null,
@@ -276,8 +290,18 @@ export async function getCharacterRankings(
     metric: opts.metric ?? "dps",
     page: opts.page ?? 1,
   });
+  const page = data.worldData.encounter?.characterRankings;
+  return { rows: page?.rankings ?? [], hasMore: !!page?.hasMorePages };
+}
 
-  return data.worldData.encounter?.characterRankings?.rankings ?? [];
+/** One page of rankings, at most a week old: what the reference parses are chosen from. */
+export async function getCharacterRankings(encounterID: number, opts: RankingOptions): Promise<RankingRow[]> {
+  return (await rankingsPage(rankingsKey(encounterID, opts, "week"), encounterID, opts)).rows;
+}
+
+/** One page of rankings, at most a day old, and whether there are more: for scanning deep into them. */
+export function getRankingsPage(encounterID: number, opts: RankingOptions) {
+  return rankingsPage(rankingsKey(encounterID, opts, "day"), encounterID, opts);
 }
 
 export interface GraphSeries {

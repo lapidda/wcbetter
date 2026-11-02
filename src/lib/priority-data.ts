@@ -1,9 +1,10 @@
 import type { PlayerProfile } from "./model/types";
-import type { PriorityInput } from "./spec/windwalker-priority";
+import type { CastResource, PriorityInput } from "./spec/priority";
 import { getActorsAndAbilities, getCastsWithResources, getEvents, getReportMeta } from "./wcl/fetchers";
 
 /**
- * What the priority check needs for one profiled pull, yours or a top parse's:
+ * What a priority check needs for one profiled pull, yours or a top parse's, for
+ * any spec:
  * casts with Energy and Chi, the player's own buff events, and the report's
  * ability names to read them by. Two small event queries per pull (one page
  * each) plus the report's ability list, cached like everything else.
@@ -30,6 +31,8 @@ export async function loadPriorityInput(profile: PlayerProfile): Promise<Priorit
         // WCL resource types: 3 is Energy, 12 is Chi.
         const energy = res.find((r) => r.type === 3);
         const chi = res.find((r) => r.type === 12);
+        const resources: Record<number, CastResource> = {};
+        for (const r of res) resources[r.type] = { amount: r.amount, max: r.max, ...(r.cost != null ? { cost: r.cost } : {}) };
         return {
           t: e.timestamp - fight.startTime,
           name: name(e.abilityGameID),
@@ -38,12 +41,19 @@ export async function loadPriorityInput(profile: PlayerProfile): Promise<Priorit
           chi: chi?.amount ?? null,
           chiCost: chi?.cost ?? null,
           chiMax: chi?.max ?? null,
+          resources,
         };
       })
       .sort((a, b) => a.t - b.t),
     auras: buffs
       .filter((e) => e.abilityGameID != null && e.targetID === profile.actorId)
-      .map((e) => ({ t: e.timestamp - fight.startTime, type: e.type, id: e.abilityGameID!, name: name(e.abilityGameID) }))
+      .map((e) => ({
+        t: e.timestamp - fight.startTime,
+        type: e.type,
+        id: e.abilityGameID!,
+        name: name(e.abilityGameID),
+        ...(typeof e.stack === "number" ? { stack: e.stack } : {}),
+      }))
       .sort((a, b) => a.t - b.t),
     deathsMs: profile.deaths.map((d) => d.atMs),
   };

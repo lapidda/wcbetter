@@ -7,31 +7,17 @@
 // you never pressed, a buff you never had, a talent you did not pick. The
 // guide says to skip such steps; this does it for you, and you can override.
 
+import { missingFromBuild, type GuideList, type GuideSet, type Need } from "./guide";
+
+export { missingFromBuild };
+export type { BuildEvidence, GuideLine, GuideList, Need } from "./guide";
+
 export const GUIDE_SOURCE = {
   name: "Peak of Serenity — Windwalker Monk PvE Guide",
   url: "https://www.peakofserenity.com/tww/windwalker/pve-guide/",
   patch: "12.1",
   updated: "2026-09-23",
-} as const;
-
-export type Need = { cast: string } | { buff: string } | { talent: string };
-
-export interface GuideLine {
-  action: string;
-  /** When the line applies; empty for an unconditional line. */
-  when?: string;
-  /** All of these must be in your build for the line to apply. */
-  needs?: Need[];
-}
-
-export interface GuideList {
-  id: string;
-  tree: "conduit" | "shado-pan";
-  target: "single" | "aoe";
-  variant: "default" | "advanced";
-  /** The line numbering matches this list, which is what the priority check on the tab uses. */
-  lines: GuideLine[];
-}
+};
 
 const WDP = "Whirling Dragon Punch";
 const SOTW = "Strike of the Windlord";
@@ -60,9 +46,8 @@ const XUEN_AWAY = "Xuen is more than 10s away";
 export const GUIDE_LISTS: GuideList[] = [
   {
     id: "st-default-conduit",
-    tree: "conduit",
+    group: "conduit",
     target: "single",
-    variant: "default",
     lines: [
       { action: WDP, when: XUEN_AWAY, needs: [cast(WDP)] },
       { action: CONDUIT, when: "no Heart of the Jade Serpent from Whirling Dragon Punch or Strike of the Windlord is up", needs: [cast(CONDUIT)] },
@@ -83,9 +68,8 @@ export const GUIDE_LISTS: GuideList[] = [
   },
   {
     id: "st-advanced-conduit",
-    tree: "conduit",
+    group: "conduit",
     target: "single",
-    variant: "advanced",
     lines: [
       { action: WDP, when: `in its grace period and ${XUEN_AWAY}`, needs: [cast(WDP)] },
       { action: STOMP, when: "Chi is low, Zenith is about to end, or during Conduit's channel", needs: [cast(STOMP)] },
@@ -115,9 +99,8 @@ export const GUIDE_LISTS: GuideList[] = [
   },
   {
     id: "aoe-conduit",
-    tree: "conduit",
+    group: "conduit",
     target: "aoe",
-    variant: "default",
     lines: [
       { action: FOF, when: "Heart of the Jade Serpent is about to end" },
       { action: WDP, when: XUEN_AWAY, needs: [cast(WDP)] },
@@ -144,9 +127,8 @@ export const GUIDE_LISTS: GuideList[] = [
   },
   {
     id: "st-default-sp",
-    tree: "shado-pan",
+    group: "shado-pan",
     target: "single",
-    variant: "default",
     lines: [
       { action: WDP, needs: [cast(WDP)] },
       { action: STOMP, when: "Chi is low or Zenith is about to end", needs: [cast(STOMP)] },
@@ -165,9 +147,8 @@ export const GUIDE_LISTS: GuideList[] = [
   },
   {
     id: "st-advanced-sp",
-    tree: "shado-pan",
+    group: "shado-pan",
     target: "single",
-    variant: "advanced",
     lines: [
       { action: WDP, when: "in its grace period", needs: [cast(WDP)] },
       { action: STOMP, when: "Chi is low or Zenith is about to end", needs: [cast(STOMP)] },
@@ -193,9 +174,8 @@ export const GUIDE_LISTS: GuideList[] = [
   },
   {
     id: "aoe-sp",
-    tree: "shado-pan",
+    group: "shado-pan",
     target: "aoe",
-    variant: "default",
     lines: [
       { action: WDP, needs: [cast(WDP)] },
       { action: SOTW, needs: [cast(SOTW)] },
@@ -229,21 +209,26 @@ export const LIST_LABEL: Record<string, string> = {
   "aoe-sp": "AoE (2+ targets)",
 };
 
-/** What the log shows of your build: buttons pressed, buffs had, talents picked. */
-export interface BuildEvidence {
-  /** Buttons cast or dealing damage on these pulls. */
-  casts: string[];
-  buffs: string[];
-  /** Null when the log carried no talents; talent lines are then never crossed out. */
-  talents: string[] | null;
-}
-
-/** Why a line does not fit your build, or null when it does (or the log cannot tell). */
-export function missingFromBuild(line: GuideLine, evidence: BuildEvidence): string | null {
-  for (const need of line.needs ?? []) {
-    if ("cast" in need && !evidence.casts.includes(need.cast)) return `you never used ${need.cast} on these pulls`;
-    if ("buff" in need && !evidence.buffs.includes(need.buff)) return `you never had ${need.buff} on these pulls`;
-    if ("talent" in need && evidence.talents && !evidence.talents.includes(need.talent)) return `${need.talent} is not in your talents`;
-  }
-  return null;
-}
+/** The Windwalker tab's card. */
+export const WW_GUIDE: GuideSet = {
+  source: GUIDE_SOURCE,
+  groups: [
+    { id: "conduit", label: "Conduit" },
+    { id: "shado-pan", label: "Shado-Pan" },
+  ],
+  lists: GUIDE_LISTS,
+  labels: LIST_LABEL,
+  checked: ["st-default-conduit"],
+  idle: "Nothing ready — wait for Energy or a cooldown, then start over",
+  storageKey: "wcbetter:ww-guide:v1",
+  colours: {
+    "Tiger Palm": "gen",
+    "Fists of Fury": "big",
+    "Whirling Dragon Punch": "big",
+    "Strike of the Windlord": "big",
+    "Celestial Conduit": "cd",
+    "Zenith Stomp": "cd",
+    "Touch of Death": "cd",
+  },
+  note: "The guide uses the AoE list from 2 targets. The priority check above is single-target only.",
+};

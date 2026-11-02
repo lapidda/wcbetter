@@ -1042,3 +1042,179 @@ ol.wg-list li.out .wg-num {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Windwalker guide flowchart. */
+.wf {
+  --wf-line: var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-size: 13px;
+}
+
+.wf-start,
+.wf-end {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--wf-line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.wf-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* The "no" connector: a short vertical line from the question above. */
+.wf-link {
+  position: relative;
+  height: 22px;
+  margin-left: 22px;
+  padding-left: 10px;
+  border-left: 2px solid var(--wf-line);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 22px;
+}
+
+.wf-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+}
+
+.wf-q {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 560px;
+  padding: 7px 10px;
+  border: 1px solid var(--wf-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.wf-num {
+  color: var(--accent);
+  min-width: 16px;
+}
+
+.wf-x {
+  margin-left: 4px;
+  padding: 0 4px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.wf-q:hover .wf-x {
+  opacity: 1;
+}
+
+.wf-yes {
+  color: var(--good);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.wf-a {
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(122, 162, 247, 0.14);
+  border: 1px solid rgba(122, 162, 247, 0.45);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wf-a.gen { background: rgba(158, 206, 106, 0.12); border-color: rgba(158, 206, 106, 0.45); }
+.wf-a.big { background: rgba(224, 175, 104, 0.14); border-color: rgba(224, 175, 104, 0.5); }
+.wf-a.cd { background: rgba(187, 154, 247, 0.14); border-color: rgba(187, 154, 247, 0.5); }
+
+.wf-back {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.wf-cond {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Spec comparison. */
+.cmp-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+
+.cmp-controls label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cmp-controls select {
+  display: block;
+  margin-top: 3px;
+  padding: 6px 9px;
+  font-size: 13px;
+}
+
+.cmp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 6px 6px 0;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.cmp-chip button {
+  padding: 0 5px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+table.cmp-table td.best {
+  font-weight: 700;
+  background: rgba(158, 206, 106, 0.12);
+}
+
+table.cmp-table td.thin {
+  color: var(--minor);
+}
+
+table.cmp-table tfoot td {
+  border-top: 2px solid var(--border);
+  font-weight: 600;
+}
+
+.cmp-col-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  color: var(--muted);
+}

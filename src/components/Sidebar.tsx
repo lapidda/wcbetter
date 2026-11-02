@@ -10,9 +10,11 @@ const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
 const VIEWS: Array<{ view: View; label: string; hint: string }> = [
   { view: "player", label: "Player analysis", hint: "one DPS vs the top parses" },
   { view: "monk", label: "Windwalker", hint: "button presses and burst windows" },
+  { view: "dk", label: "Death Knight", hint: "Unholy and Frost priority" },
   { view: "notes", label: "Raid", hint: "performance and callout notes" },
   { view: "tanks", label: "Tanks", hint: "taunts, defensives, swap order" },
   { view: "buffs", label: "Raid buffs", hint: "what each raid buff is worth" },
+  { view: "compare", label: "Compare specs", hint: "top parses per boss, by hero tree" },
 ];
 
 /**
@@ -124,7 +126,7 @@ export function Sidebar() {
         </section>
       )}
 
-      {summary && (
+      {summary && view !== "compare" && (
         <section className="side-section">
           <div className="side-label">Boss</div>
           {ws.encounters.length === 0 && (
@@ -152,7 +154,7 @@ export function Sidebar() {
         </section>
       )}
 
-      {activeEncounter && (
+      {activeEncounter && view !== "compare" && (
         <section className="side-section side-pulls">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
             <div className="side-label" style={{ margin: 0 }}>
@@ -216,7 +218,7 @@ export function Sidebar() {
         </section>
       )}
 
-      {summary && (
+      {summary && view !== "compare" && (
         <div className="side-footer">
           <button type="button" className="primary" style={{ width: "100%" }} disabled={!canRun} onClick={() => ws.analyze()}>
             {run.busy

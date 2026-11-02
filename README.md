@@ -22,7 +22,8 @@ excluded, with a reason), and you press one button. `▸` next to a pull analyse
 trying a different pull never means going back to a form.
 
 The sidebar switches between the views — **Player analysis**, **Windwalker** ([Windwalker](#windwalker),
-a Monk-specific lens on the same run), **Raid** ([performance](#raid-performance) and [notes](#raid-notes)), **Tanks** ([Tanks](#tanks)) and **Raid buffs** ([Raid buffs](#raid-buffs)) — and they share
+a Monk-specific lens on the same run), **Death Knight** ([Death Knight](#death-knight), the same for Unholy
+and Frost), **Raid** ([performance](#raid-performance) and [notes](#raid-notes)), **Tanks** ([Tanks](#tanks)) and **Raid buffs** ([Raid buffs](#raid-buffs)), **Compare specs** ([Compare specs](#compare-specs)) — and they share
 the loaded report, the selection and each other's finished results, so flipping between them
 re-fetches nothing. Once the player analysis has run, each pull in
 the list shows its DPS.
@@ -409,6 +410,63 @@ button never cast or dealing damage on these pulls (Strike of the Windlord, Slic
 had (Unbroken Rhythm, the Season 2 four-piece), a talent not picked (Obsidian Spiral). Click any line
 to cross it out or bring it back; the remaining lines renumber, your choices are kept in this browser,
 and lines crossed out of the default Conduit list are hidden from the priority check above.
+
+**Flowchart** shows the same list as a decision chain: from the top after every press, each line asks
+"is this button ready, and does its condition hold?" — yes presses it, no falls through to the next.
+Crossed-out lines are left out of the chain (and can be brought back from under it), so crossing out
+the lines your build does not use gives your own flowchart.
+
+## Death Knight
+
+`/dk` is the Windwalker priority check for Unholy and Frost Death Knights, on the same run (no extra
+queries beyond the priority data). The lists are Wowhead's (patch 12.1.5, updated 13 October 2026),
+cross-checked against Icy Veins and Method, in `src/lib/spec/deathknight-guide.ts`; the checks are in
+`src/lib/spec/deathknight.ts`. The shared machinery — aura windows and stacks, the summary against the
+top parses, the lists card with its flowchart and crossing-out, the priority table — is in
+`src/lib/spec/priority.ts`, `src/lib/spec/guide.ts`, `src/components/PriorityGuide.tsx` and
+`src/components/PriorityPanel.tsx`, so another spec needs only its lists and its rules.
+
+The log gives every proc as a buff with its stacks, Runic Power on every cast and Runes on every cast
+that spends them. Runes between spenders are a lower bound (what the last spender left), so "you had a
+Rune" is only claimed when even that says so. The hero tree is read from the log: Vampiric Strike means
+San'layn, Reaper's Mark means Deathbringer.
+
+| Spec | Proven | Not checked |
+|---|---|---|
+| Unholy | Death Coil with Sudden Doom (and Sudden Doom that ran out), Festering Strike at no Lesser Ghoul stacks, Scourge Strike before a plain Death Coil with stacks and a Rune, Festering Strike before Dark Transformation at 3 or fewer stacks (San'layn), Necrotic Coil first in Forbidden Knowledge | Soul Reaper (target health), Blightfall and "about 7s after" timings, Army and Dark Transformation readiness, Putrefy charges, Festering Scythe, Outbreak (a debuff on the target) |
+| Frost | Obliterate at 2 Killing Machine (or Killing Machine with Exterminate), Howling Blast with Rime (and Rime or Killing Machine that ran out), Frost Strike before an Obliterate without Killing Machine at full Runic Power, Obliterate with Killing Machine over Frost Strike | Empower Rune Weapon charges, cooldown readiness, a plain Frost Strike against a plain Obliterate (the guides disagree) |
+
+Unholy is judged against two lists, switching on the Forbidden Knowledge buff, as Wowhead splits them.
+
+Three things the log showed that changed the rules:
+
+- **Lesser Ghoul comes in two buff ids**: the stacks Festering Strike builds, and the ghouls they summon.
+  The stacks are the id each Scourge or Vampiric Strike takes one from a few milliseconds after it lands.
+- **Exterminate is not a press.** Deathbringer's Exterminate fires on its own after Obliterate and Empower
+  Rune Weapon, and refreshes Killing Machine as it does — so it is never judged, and Killing Machine lost
+  to overcapping is not counted (a lost proc and an Exterminate refresh look the same).
+- **Where the guides disagree, nothing is marked**: Method puts Obliterate with Killing Machine above
+  Howling Blast with Rime, and a Frost Strike at 1 Rune or less above Killing Machine; Icy Veins builds
+  Lesser Ghoul with Festering Strike at up to 3 stacks.
+
+The breaks list under the lists card shows, by default, only the lines you break more often than the top
+parses — Sudden Doom, for one, is held by the top Unholy players about as often as by anyone.
+
+## Compare specs
+
+`/compare` puts the top parses of any specs side by side, boss by boss, with no report loaded. Add a
+column by class, spec and hero tree: either tree, or **any hero tree** for the spec's best regardless. The
+class, spec and hero-tree lists come from the talent data, so a new patch needs no code change. Pick the
+raid, Mythic and/or Heroic, how recent (7 days by default) and how many parses (10 by default).
+
+Each cell is the median of the top parses, so one outlier does not skew it. A hero tree comes from each
+parse's talents. Rankings hold each player's best parse on the current patch partition, so a player whose
+best is older than the window drops out rather than falling back to a worse recent parse. A cell with fewer
+parses than asked for is marked and cannot win a boss, and a column missing any full cell gets no average.
+
+Rankings are scanned page by page until every column on a boss is full, up to 25 pages per spec per boss
+(about one point of the 3,600 per hour each). The pages are cached for a day, so changing columns or
+re-running is cheap.
 
 ## Raid performance
 

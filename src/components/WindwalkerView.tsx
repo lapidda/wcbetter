@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import type { AnalysisReport } from "@/lib/analyze";
 import { formatDuration } from "@/lib/model/stats";
 import { WW, type BurstWindow, type Check, type Press, type PullAnalysis, type Tree } from "@/lib/spec/windwalker";
-import { GUIDE_LISTS, type BuildEvidence } from "@/lib/spec/windwalker-guide";
-import type { PriorityRow, PrioritySummary } from "@/lib/spec/windwalker-priority";
+import { GUIDE_LISTS, WW_GUIDE, type BuildEvidence } from "@/lib/spec/windwalker-guide";
 import { iconUrl, wclUrl } from "@/lib/wcl/links";
 import { TalentBuilds } from "./TalentBuilds";
-import { useGuideState, WindwalkerGuide } from "./WindwalkerGuide";
+import { PriorityGuide, useGuideState } from "./PriorityGuide";
+import { PriorityPanel } from "./PriorityPanel";
 
 const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -58,7 +58,7 @@ export function WindwalkerView({ report }: { report: AnalysisReport }) {
   const [fightId, setFightId] = useState(() => (ww ? defaultPull(ww.pulls)?.fightId : undefined));
   const [openWindow, setOpenWindow] = useState<number | null>(0);
   const [showAll, setShowAll] = useState(false);
-  const guide = useGuideState(ww?.build ?? NO_BUILD);
+  const guide = useGuideState(ww?.build ?? NO_BUILD, WW_GUIDE.storageKey);
 
   const pull = ww?.pulls.find((p) => p.fightId === fightId) ?? ww?.pulls[0];
   const flagged = useMemo(() => (pull ? pull.presses.filter((p) => p.marks.length > 0) : []), [pull]);
@@ -123,7 +123,15 @@ export function WindwalkerView({ report }: { report: AnalysisReport }) {
       {ww.priority && (
         <PriorityPanel
           summary={ww.priority}
-          crossed={guide.crossed(CHECKED_LIST)}
+          description={
+            <>
+              Peak of Serenity&apos;s Conduit single-target priority (patch 12.1), checked on every press. A press only
+              counts when the log proves a higher line applied: a proc was up, Energy was full outside Zenith, Heart of
+              the Jade Serpent was running, or Xuen was under 10s away.
+            </>
+          }
+          isCrossed={(r) => guide.crossed(CHECKED_LIST).has(r.rank - 1)}
+          more="Skipped lines are marked on the press in the list below."
           link={(fightId, ms) => {
             const p = ww.pulls.find((x) => x.fightId === fightId);
             return wclUrl(report.report.code, fightId, {
@@ -135,7 +143,7 @@ export function WindwalkerView({ report }: { report: AnalysisReport }) {
       )}
 
       {/* --- The guide's lists, with your build's lines -------------------- */}
-      <WindwalkerGuide tree={ww.tree} state={guide} />
+      <PriorityGuide guide={WW_GUIDE} group={ww.tree === "unknown" ? null : ww.tree} state={guide} />
 
       {/* --- One pull in detail ------------------------------------------ */}
       <div className="panel" style={{ marginTop: 24 }}>
@@ -417,163 +425,6 @@ function AllPresses({ presses, icons }: { presses: Press[]; icons: Record<number
         </div>
       ))}
     </div>
-  );
-}
-
-/**
- * The guide's priority list, ranked by which line you break more often than
- * the top parses. Only provable breaks count; the lines the log cannot judge
- * are listed with the reason.
- */
-function PriorityPanel({
-  summary,
-  crossed,
-  link,
-}: {
-  summary: PrioritySummary;
-  /** Lines crossed out in the guide card (0-based), hidden here too. */
-  crossed: Map<number, string>;
-  link: (fightId: number, ms: number) => string;
-}) {
-  const [open, setOpen] = useState<number | null>(null);
-  const inBuild = summary.rows.filter((r) => !crossed.has(r.rank - 1));
-  const checked = inBuild.filter((r) => r.checked);
-  const unchecked = inBuild.filter((r) => !r.checked).sort((a, b) => a.rank - b.rank);
-  const hidden = summary.rows.filter((r) => crossed.has(r.rank - 1));
-  const maxRate = Math.max(0.1, ...checked.map((r) => Math.max(r.you.perMin, r.topPerMin ?? 0)));
-
-  return (
-    <div className="panel" style={{ marginTop: 24 }}>
-      <div style={{ fontWeight: 600 }}>Priority list — which line you break most</div>
-      <div className="muted" style={{ fontSize: 12, margin: "2px 0 12px" }}>
-        Peak of Serenity&apos;s Conduit single-target priority (patch 12.1), checked on every press. A press only counts
-        when the log proves a higher line applied: a proc was up, Energy was full outside Zenith, Heart of the Jade
-        Serpent was running, or Xuen was under 10s away. Ranked by how much more often you break a line than the{" "}
-        {summary.referenceCount} top parses on this boss — on a boss with several targets they break the
-        single-target list too, and the comparison absorbs that.
-      </div>
-
-      <table className="abilities pr-table">
-        <thead>
-          <tr>
-            <th style={{ textAlign: "left" }}>#</th>
-            <th style={{ textAlign: "left" }}>Line</th>
-            <th>you</th>
-            <th style={{ textAlign: "left", minWidth: 150 }}>per minute: you / top</th>
-            <th title="your rate minus the top parses' median">over top</th>
-          </tr>
-        </thead>
-        <tbody>
-          {checked.map((r) => (
-            <PriorityRows
-              key={r.rank}
-              row={r}
-              max={maxRate}
-              open={open === r.rank}
-              onToggle={() => setOpen(open === r.rank ? null : r.rank)}
-              link={link}
-            />
-          ))}
-        </tbody>
-      </table>
-
-      {hidden.length > 0 && (
-        <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          Hidden, crossed out in the priority list below: {hidden.map((r) => `#${r.rank} ${r.action}`).join(", ")}.
-        </div>
-      )}
-
-      <div className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-        <b style={{ color: "var(--text)" }}>Not checked</b> — the log cannot prove these were broken:
-        <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-          {unchecked.map((r) => (
-            <li key={r.rank}>
-              #{r.rank} {r.action}
-              {r.when ? ` if ${r.when}` : ""} — {r.why}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function PriorityRows({
-  row: r,
-  max,
-  open,
-  onToggle,
-  link,
-}: {
-  row: PriorityRow;
-  max: number;
-  open: boolean;
-  onToggle: () => void;
-  link: (fightId: number, ms: number) => string;
-}) {
-  const level = r.you.count === 0 ? "good" : r.excessPerMin > 0.5 ? "bad" : r.excessPerMin > 0.15 ? "warn" : "good";
-  return (
-    <>
-      <tr className={`ww-window-row pr-row ${level}`} onClick={onToggle}>
-        <td className="mono muted" style={{ textAlign: "left" }}>
-          {open ? "▾" : "▸"} {r.rank}
-        </td>
-        <td style={{ textAlign: "left", whiteSpace: "normal" }}>
-          <b>{r.action}</b>
-          {r.when && <span className="muted"> if {r.when}</span>}
-        </td>
-        <td className="mono">
-          {r.you.count}
-          {r.you.wasted > 0 && (
-            <span className="muted" style={{ fontSize: 11 }} title="procs that ran out unused">
-              {" "}
-              ({r.you.wasted} wasted)
-            </span>
-          )}
-        </td>
-        <td style={{ textAlign: "left" }}>
-          <div className="pr-bars">
-            <div className="pr-bar you" style={{ width: `${(r.you.perMin / max) * 100}%` }} />
-            <div className="pr-bar top" style={{ width: `${((r.topPerMin ?? 0) / max) * 100}%` }} />
-          </div>
-          <span className="mono" style={{ fontSize: 11 }}>
-            {r.you.perMin.toFixed(2)} / <span className="muted">{r.topPerMin == null ? "—" : r.topPerMin.toFixed(2)}</span>
-          </span>
-        </td>
-        <td className={`mono pr-excess ${level}`}>
-          {r.excessPerMin > 0 ? "+" : ""}
-          {r.excessPerMin.toFixed(2)}
-        </td>
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={5} style={{ textAlign: "left", whiteSpace: "normal", background: "var(--panel-2)" }}>
-            {r.fix && level !== "good" && <div style={{ fontSize: 13, marginBottom: 6 }}>{r.fix}</div>}
-            {r.examples.length === 0 ? (
-              <div className="muted" style={{ fontSize: 12 }}>
-                Never broken on these pulls.
-              </div>
-            ) : (
-              <div style={{ fontSize: 12 }}>
-                {r.examples.map((e, i) => (
-                  <div key={i}>
-                    <a className="mono" href={link(e.fightId, e.t)} target="_blank" rel="noreferrer" title="open in WarcraftLogs">
-                      {formatDuration(e.t)}
-                    </a>{" "}
-                    <span className="muted">{e.label}</span> · {e.note}
-                  </div>
-                ))}
-                {r.you.count > r.examples.length && (
-                  <div className="muted">
-                    …and {r.you.count - r.examples.length} more. Skipped lines are marked on the press in the list below.
-                  </div>
-                )}
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
   );
 }
 

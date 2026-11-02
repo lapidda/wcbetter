@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { AnalysisReport, ReportSummary } from "@/lib/analyze";
 import type { BuffValuePayload } from "@/lib/model/buff-value";
+import type { CompareArgs, CompareReport } from "@/lib/model/spec-compare";
 import type { RaidPayload } from "@/lib/model/raid-payload";
 import type { TankLookup } from "@/lib/tank-lookup";
 import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
@@ -23,13 +24,13 @@ import { decodeState, defaultSelection, encodeState } from "@/lib/url-state";
 // different pull from the sidebar without starting over.
 
 export type Fight = ReportSummary["fights"][number];
-export type View = "player" | "notes" | "monk" | "tanks" | "buffs";
+export type View = "player" | "notes" | "monk" | "dk" | "tanks" | "buffs" | "compare";
 
 /**
  * Two runs, each behind two views: the player analysis and the Windwalker view
  * share one, the raid view and the tanks view the other.
  */
-export const usesPlayerRun = (view: View) => view === "player" || view === "monk";
+export const usesPlayerRun = (view: View) => view === "player" || view === "monk" || view === "dk";
 
 export interface Encounter {
   key: string;
@@ -80,6 +81,10 @@ interface WorkspaceValue {
   /** The tanks view's "top players" lookup — no report needed, kept across views. */
   tankLookup: Run<TankLookup> & { args: TankLookupArgs | null };
   lookupTank: (args: TankLookupArgs) => void;
+
+  /** The spec comparison: no report needed, kept across views. */
+  compare: Run<CompareReport>;
+  runCompare: (args: CompareArgs) => void;
 }
 
 export interface TankLookupArgs {
@@ -164,15 +169,15 @@ async function streamSse(
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const view: View = pathname?.startsWith("/notes")
-    ? "notes"
-    : pathname?.startsWith("/monk")
-      ? "monk"
-      : pathname?.startsWith("/tanks")
-        ? "tanks"
-        : pathname?.startsWith("/buffs")
-          ? "buffs"
-          : "player";
+  const VIEW_PATHS: Array<[string, View]> = [
+    ["/notes", "notes"],
+    ["/monk", "monk"],
+    ["/dk", "dk"],
+    ["/tanks", "tanks"],
+    ["/buffs", "buffs"],
+    ["/compare", "compare"],
+  ];
+  const view: View = VIEW_PATHS.find(([path]) => pathname?.startsWith(path))?.[1] ?? "player";
 
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState<ReportSummary | null>(null);
@@ -188,6 +193,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [raid, setRaid] = useState<Run<RaidPayload>>(idle);
   const [buffs, setBuffs] = useState<Run<BuffValuePayload>>(idle);
   const [tankLookup, setTankLookup] = useState<Run<TankLookup> & { args: TankLookupArgs | null }>(() => ({ ...idle<TankLookup>(), args: null }));
+
+  const [compare, setCompare] = useState<Run<CompareReport>>(idle);
+  const runCompare = useCallback((args: CompareArgs) => {
+    setCompare({ ...idle<CompareReport>(), busy: true });
+    streamSse("/api/compare", args, {
+      progress: (m) => setCompare((r) => ({ ...r, progress: [...r.progress, m] })),
+      result: (data) => setCompare((r) => ({ ...r, result: data as CompareReport })),
+      error: (m) => setCompare((r) => ({ ...r, error: m })),
+    })
+      .catch((e) => setCompare((r) => ({ ...r, error: (e as Error).message })))
+      .finally(() => setCompare((r) => ({ ...r, busy: false })));
+  }, []);
 
   const lookupTank = useCallback((args: TankLookupArgs) => {
     setTankLookup({ ...idle<TankLookup>(), busy: true, args });
@@ -344,7 +361,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const hrefFor = useCallback(
     (target: View) => {
-      if (!summary) return pathFor(target);
+      // The comparison needs no report, and a report's pulls would auto-run on reload.
+      if (!summary || target === "compare") return pathFor(target);
       // A view with a finished analysis links to exactly that analysis, so the
       // address bar stays a shareable link after switching back to it. Only the
       // first page load reads `pulls` and auto-runs; in-app navigation never does.
@@ -466,6 +484,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     hrefFor,
     tankLookup,
     lookupTank,
+    compare,
+    runCompare,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

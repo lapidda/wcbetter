@@ -6,7 +6,9 @@ import { buildCastComparison, type CastComparison } from "./model/cast-compare";
 import { buildOpenerComparison, type OpenerComparison } from "./model/opener";
 import { buildWindwalkerReport, type WindwalkerReport } from "./spec/windwalker";
 import { markPriority, priorityViolations, summarizePriority } from "./spec/windwalker-priority";
-import { loadPriorityInput } from "./windwalker-priority-data";
+import { buildDeathKnightReport, dkSpecOf, type DeathKnightReport } from "./spec/deathknight";
+import type { BuildEvidence } from "./spec/guide";
+import { loadPriorityInput } from "./priority-data";
 import { mechanicBefore } from "./model/encounter";
 import { focusGain, sectionize, selectFocus, type FindingFamily, type FocusItem } from "./model/focus";
 import { buildPlayerProfile } from "./model/profile";
@@ -101,6 +103,8 @@ export interface AnalysisReport {
   opener: OpenerComparison;
   /** Windwalker-specific analysis; null for every other spec. */
   windwalker: WindwalkerReport | null;
+  /** Unholy and Frost Death Knights: the guide priority, checked press by press. */
+  deathknight: DeathKnightReport | null;
   /** Hero trees and copyable builds of the top 100 on this boss; null if the tree data was unavailable. */
   talentBuilds: TalentBuilds | null;
 }
@@ -311,24 +315,23 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
     lanes.map((l, i) => ({ ...l, startTime: fights[i].startTime })),
     reference,
   );
-  if (windwalker) {
-    // What the log shows of the build, so the guide's lists can cross out
-    // lines it cannot use: buttons never pressed, buffs never had, talents not picked.
-    windwalker.build = {
-      // Cast or did damage: some buttons (Zenith Stomp) log no cast event of their own.
-      casts: [
-        ...new Set(
-          profiled.flatMap((p) =>
-            Object.values(p.profile.abilities)
-              .filter((a) => a.casts > 0 || a.damage > 0)
-              .map((a) => a.name),
-          ),
+  // What the log shows of the build, so a guide's lists can cross out lines
+  // it cannot use: buttons never pressed, buffs never had, talents not picked.
+  const build: BuildEvidence = {
+    // Cast or did damage: some buttons (Zenith Stomp) log no cast event of their own.
+    casts: [
+      ...new Set(
+        profiled.flatMap((p) =>
+          Object.values(p.profile.abilities)
+            .filter((a) => a.casts > 0 || a.damage > 0)
+            .map((a) => a.name),
         ),
-      ],
-      buffs: [...new Set(profiled.flatMap((p) => Object.values(p.profile.buffs).map((b) => b.name)))],
-      talents: talentNames,
-    };
-  }
+      ),
+    ],
+    buffs: [...new Set(profiled.flatMap((p) => Object.values(p.profile.buffs).map((b) => b.name)))],
+    talents: talentNames,
+  };
+  if (windwalker) windwalker.build = build;
   if (windwalker?.tree === "conduit") {
     // The guide's priority, press by press: needs Energy, Chi and the player's
     // procs, which nothing else in the analysis reads.
@@ -349,6 +352,26 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
       windwalker.priority = summarizePriority(yours, top);
     } catch (error) {
       warnings.push(`Priority check unavailable: ${(error as Error).message}`);
+    }
+  }
+
+  // Unholy and Frost Death Knights: the same press-by-press priority check,
+  // against Wowhead's lists, from Runes, Runic Power and the procs' stacks.
+  let deathknight: DeathKnightReport | null = null;
+  if (dkSpecOf(withSpec.profile)) {
+    progress("Checking the Death Knight priority list...");
+    try {
+      const [mine, refs] = await Promise.all([
+        Promise.all(profiled.map((p) => loadPriorityInput(p.profile))),
+        Promise.all(reference.members.map((m) => loadPriorityInput(m).catch(() => null))),
+      ]);
+      deathknight = buildDeathKnightReport(
+        lanes.map((l, i) => ({ ...l, startTime: fights[i].startTime, input: mine[i] })),
+        reference.members.map((m, i) => ({ profile: m, input: refs[i] })),
+        build,
+      );
+    } catch (error) {
+      warnings.push(`Death Knight priority check unavailable: ${(error as Error).message}`);
     }
   }
 
@@ -420,6 +443,7 @@ export async function analyzeEncounter(args: AnalyzeArgs): Promise<AnalysisRepor
     castComparison,
     opener,
     windwalker,
+    deathknight,
     talentBuilds,
   };
 }

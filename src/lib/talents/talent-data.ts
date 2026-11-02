@@ -99,6 +99,32 @@ function talentData(): Promise<RawSpec[]> {
   return memo.data;
 }
 
+export interface SpecChoice {
+  /** As WarcraftLogs names it: "DeathKnight", "BeastMastery". */
+  className: string;
+  specName: string;
+  heroTrees: string[];
+}
+
+/** Pure, so tests can feed a local copy. */
+export function specChoicesFrom(raw: RawSpec[]): SpecChoice[] {
+  const wcl = (s: string) => s.replace(/[^A-Za-z]/g, "");
+  return raw
+    .map((spec) => ({
+      className: wcl(spec.className),
+      specName: wcl(spec.specName),
+      heroTrees: [
+        ...new Set(spec.subTreeNodes.flatMap((n) => n.entries.filter((e) => e.traitSubTreeId != null).map((e) => e.name))),
+      ],
+    }))
+    .sort((a, b) => a.className.localeCompare(b.className) || a.specName.localeCompare(b.specName));
+}
+
+/** Every class, spec and hero tree in the game, so nothing has to be added by hand after a patch. */
+export async function listSpecs(): Promise<SpecChoice[]> {
+  return specChoicesFrom(await talentData());
+}
+
 export async function getSpecTree(className: string, specName: string): Promise<SpecTree | null> {
   return specTreeFrom(await talentData(), className, specName);
 }
